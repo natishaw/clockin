@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>EJPM · Clock In/Out</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg: #F5F4F0;
+  --card: #FFFFFF;
+  --ink: #1A1A1A;
+  --muted: #888880;
+  --in-color: #1A6B3C;
+  --in-bg: #E8F5EE;
+  --in-border: #A8D5B5;
+  --out-color: #7A2020;
+  --out-bg: #FAE8E8;
+  --out-border: #E5AAAA;
+  --accent: #2C5282;
+  --accent-light: #EBF0F8;
+  --radius: 16px;
+  --shadow: 0 2px 16px rgba(0,0,0,0.08);
+  --danger: #C0392B;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+}
+.screen { display: none; width: 100%; }
+.screen.active { display: block; }
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 28px 24px;
+  box-shadow: var(--shadow);
+}
+label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+select, input[type="text"], input[type="password"], input[type="number"], input[type="date"] {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1.5px solid #E8E8E4;
+  border-radius: 10px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+  background: #FAFAF8;
+  transition: border-color 0.2s;
+}
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23888880' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-color: #FAFAF8;
+  cursor: pointer;
+  font-size: 17px;
+}
+select:focus, input:focus { outline: none; border-color: var(--accent); background-color: #fff; }
+
+/* NAV */
+.nav-bar {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  background: #fff;
+  border-top: 1px solid #E8E8E4;
+  display: flex;
+  z-index: 50;
+}
+.nav-btn {
+  flex: 1;
+  border: none;
+  background: none;
+  padding: 12px 8px 14px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+.nav-btn .nav-icon { font-size: 18px; line-height: 1; }
+.nav-btn.active { color: var(--accent); }
+.page-wrap { width: 100%; max-width: 480px; padding-bottom: 70px; }
+
+/* CLOCK SCREEN */
+.top-bar { text-align: center; margin-bottom: 32px; }
+.time-display { font-size: 52px; font-weight: 600; letter-spacing: -2px; color: var(--ink); line-height: 1; }
+.date-display { font-size: 14px; color: var(--muted); margin-top: 6px; }
+.divider { text-align: center; margin: 22px 0 18px; position: relative; }
+.divider::before { content: ''; position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: #EEEEE8; }
+.divider span { position: relative; background: var(--card); padding: 0 12px; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.btn { border: none; border-radius: 12px; padding: 20px 10px; font-family: 'DM Sans', sans-serif; font-size: 17px; font-weight: 700; cursor: pointer; transition: all 0.15s ease; }
+.btn-in { background: var(--in-bg); color: var(--in-color); border: 1.5px solid var(--in-border); }
+.btn-out { background: var(--out-bg); color: var(--out-color); border: 1.5px solid var(--out-border); }
+.btn:active { transform: scale(0.97); }
+.btn:hover { filter: brightness(0.96); }
+.btn .icon { display: block; font-size: 26px; margin-bottom: 4px; }
+
+/* SUCCESS */
+#successScreen { text-align: center; width: 100%; max-width: 480px; padding-bottom: 70px; }
+.success-icon { width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 36px; margin: 0 auto 20px; }
+.success-icon.in { background: var(--in-bg); }
+.success-icon.out { background: var(--out-bg); }
+.success-title { font-size: 28px; font-weight: 700; color: var(--ink); margin-bottom: 8px; }
+.success-sub { font-size: 15px; color: var(--muted); margin-bottom: 6px; }
+.success-time { font-family: 'DM Mono', monospace; font-size: 13px; color: var(--muted); background: #F0F0EC; display: inline-block; padding: 4px 12px; border-radius: 6px; margin-bottom: 28px; }
+.btn-back { background: var(--ink); color: #fff; border: none; border-radius: 12px; padding: 16px 32px; font-family: 'DM Sans', sans-serif; font-size: 16px; font-weight: 600; cursor: pointer; }
+
+/* LOADING */
+#loadingScreen { text-align: center; width: 100%; max-width: 480px; padding-bottom: 70px; }
+.spinner { width: 48px; height: 48px; border: 3px solid #E8E8E4; border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+#loadingScreen p { color: var(--muted); font-size: 15px; }
+
+/* PASSCODE */
+#passcodeScreen { width: 100%; max-width: 340px; padding-bottom: 70px; }
+.passcode-title { text-align: center; font-size: 20px; font-weight: 700; color: var(--ink); margin-bottom: 6px; }
+.passcode-sub { text-align: center; font-size: 13px; color: var(--muted); margin-bottom: 24px; }
+.dots-row { display: flex; justify-content: center; gap: 14px; margin-bottom: 28px; }
+.dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #C8C8C0; background: transparent; transition: background 0.1s, border-color 0.1s; }
+.dot.filled { background: var(--accent); border-color: var(--accent); }
+.numpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.num-btn { background: var(--card); border: 1.5px solid #E8E8E4; border-radius: 12px; padding: 18px 10px; font-family: 'DM Sans', sans-serif; font-size: 22px; font-weight: 500; color: var(--ink); cursor: pointer; transition: background 0.1s; text-align: center; }
+.num-btn:active, .num-btn:hover { background: var(--accent-light); border-color: var(--accent); }
+.num-btn.del { font-size: 18px; color: var(--muted); }
+.num-btn.empty { background: transparent; border-color: transparent; cursor: default; }
+.passcode-error { text-align: center; color: var(--danger); font-size: 13px; margin-top: 14px; min-height: 20px; }
+
+/* ADMIN */
+#adminScreen { width: 100%; max-width: 480px; padding-bottom: 80px; }
+.admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.admin-header h1 { font-size: 20px; font-weight: 700; color: var(--ink); }
+.lock-btn { background: #F0F0EC; border: none; border-radius: 8px; padding: 6px 12px; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600; color: var(--muted); cursor: pointer; }
+.tabs { display: flex; border-bottom: 2px solid #EEEEE8; margin-bottom: 20px; }
+.tab { padding: 10px 16px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; border: none; background: none; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: color 0.15s, border-color 0.15s; }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+.btn-primary { background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 11px 20px; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
+.btn-primary:hover { opacity: 0.88; }
+.btn-secondary { background: #F0F0EC; color: var(--ink); border: none; border-radius: 10px; padding: 11px 20px; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; }
+.btn-secondary:hover { background: #E4E4DC; }
+.btn-danger { background: #FEE8E8; color: var(--danger); border: 1.5px solid #F5AAAA; border-radius: 10px; padding: 9px 16px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn-danger:hover { background: #FDCFCF; }
+.date-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+.stat-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
+.stat-card { background: var(--accent-light); border-radius: 10px; padding: 14px 12px; text-align: center; }
+.stat-card .stat-num { font-size: 22px; font-weight: 700; color: var(--accent); line-height: 1; }
+.stat-card .stat-lbl { font-size: 10px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
+.tbl-wrap { overflow-x: auto; border-radius: 10px; border: 1.5px solid #E8E8E4; margin-bottom: 16px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { background: #F5F4F0; padding: 10px 12px; text-align: left; font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--muted); border-bottom: 1.5px solid #E8E8E4; }
+td { padding: 10px 12px; border-bottom: 1px solid #F0F0EC; color: var(--ink); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tr.total-row td { background: var(--accent-light); font-weight: 700; color: var(--accent); border-top: 1.5px solid #C8D8F0; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+.badge-in { background: var(--in-bg); color: var(--in-color); }
+.badge-out { background: var(--out-bg); color: var(--out-color); }
+.emp-list { margin-bottom: 16px; }
+.emp-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; background: var(--card); border: 1.5px solid #E8E8E4; border-radius: 10px; margin-bottom: 8px; flex-wrap: wrap; gap: 8px; }
+.emp-name { font-weight: 600; font-size: 15px; }
+.emp-actions { display: flex; gap: 8px; align-items: center; }
+.break-badge { background: #FFF3E0; color: #E65100; border: 1px solid #FFB74D; border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 600; }
+.add-emp-row { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+.add-emp-row input { flex: 1; min-width: 120px; }
+.setting-item { display: flex; justify-content: space-between; align-items: center; padding: 14px 0; border-bottom: 1px solid #F0F0EC; flex-wrap: wrap; gap: 8px; }
+.setting-label { font-weight: 600; font-size: 14px; }
+.setting-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.pass-row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.pass-row input { max-width: 140px; }
+.section-title { font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin: 20px 0 10px; }
+.section-title:first-child { margin-top: 0; }
+.empty-state { text-align: center; padding: 32px 16px; color: var(--muted); font-size: 14px; }
+.empty-icon { font-size: 36px; margin-bottom: 12px; }
+.btn-row-right { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.loading-inline { text-align: center; padding: 24px; color: var(--muted); font-size: 14px; }
+.spinner-sm { width: 24px; height: 24px; border: 2px solid #E8E8E4; border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 8px; }
+.refresh-btn { background: none; border: none; cursor: pointer; font-size: 14px; color: var(--accent); font-family: 'DM Sans', sans-serif; font-weight: 600; padding: 4px 8px; }
+.refresh-btn:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<!-- CLOCK SCREEN -->
+<div id="clockScreen" class="screen active page-wrap">
+  <div class="top-bar">
+    <div class="time-display" id="clockTime">--:--</div>
+    <div class="date-display" id="clockDate">--</div>
+  </div>
+  <div class="card">
+    <label for="empSelect">Who are you?</label>
+    <select id="empSelect">
+      <option value="" disabled selected>Select your name…</option>
+    </select>
+    <div class="divider"><span>action</span></div>
+    <span style="display:block;font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-bottom:12px;">What are you doing?</span>
+    <div class="btn-row">
+      <button class="btn btn-in" onclick="doClockAction('IN')">
+        <span class="icon">👋</span> Clock In
+      </button>
+      <button class="btn btn-out" onclick="doClockAction('OUT')">
+        <span class="icon">🚪</span> Clock Out
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- LOADING -->
+<div id="loadingScreen" class="screen">
+  <div class="spinner"></div>
+  <p>Saving your record…</p>
+</div>
+
+<!-- SUCCESS -->
+<div id="successScreen" class="screen">
+  <div class="success-icon" id="successIcon"></div>
+  <div class="success-title" id="successTitle"></div>
+  <div class="success-sub" id="successSub"></div>
+  <div class="success-time" id="successTime"></div>
+  <button class="btn-back" onclick="showScreen('clockScreen')">Done ✓</button>
+</div>
+
+<!-- PASSCODE -->
+<div id="passcodeScreen" class="screen">
+  <div class="passcode-title">Admin Access</div>
+  <div class="passcode-sub">Enter your 4-digit passcode</div>
+  <div class="dots-row" id="dotsRow">
+    <div class="dot" id="d0"></div>
+    <div class="dot" id="d1"></div>
+    <div class="dot" id="d2"></div>
+    <div class="dot" id="d3"></div>
+  </div>
+  <div class="numpad">
+    <button class="num-btn" onclick="numPress('1')">1</button>
+    <button class="num-btn" onclick="numPress('2')">2</button>
+    <button class="num-btn" onclick="numPress('3')">3</button>
+    <button class="num-btn" onclick="numPress('4')">4</button>
+    <button class="num-btn" onclick="numPress('5')">5</button>
+    <button class="num-btn" onclick="numPress('6')">6</button>
+    <button class="num-btn" onclick="numPress('7')">7</button>
+    <button class="num-btn" onclick="numPress('8')">8</button>
+    <button class="num-btn" onclick="numPress('9')">9</button>
+    <button class="num-btn empty"></button>
+    <button class="num-btn" onclick="numPress('0')">0</button>
+    <button class="num-btn del" onclick="numDel()">⌫</button>
+  </div>
+  <div class="passcode-error" id="passcodeError"></div>
+</div>
+
+<!-- ADMIN -->
+<div id="adminScreen" class="screen page-wrap">
+  <div class="admin-header">
+    <h1>EJPM Admin</h1>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="refresh-btn" onclick="refreshData()">↻ Refresh</button>
+      <button class="lock-btn" onclick="lockAdmin()">🔒 Lock</button>
+    </div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab(event,'payroll')">Payroll</button>
+    <button class="tab" onclick="switchTab(event,'log')">Log</button>
+    <button class="tab" onclick="switchTab(event,'employees')">Employees</button>
+    <button class="tab" onclick="switchTab(event,'settings')">Settings</button>
+  </div>
+
+  <!-- PAYROLL TAB -->
+  <div id="tab-payroll" class="tab-content active">
+    <p class="section-title">Period</p>
+    <div class="date-row">
+      <div><label>From</label><input type="date" id="periodFrom" onchange="renderPayroll()"/></div>
+      <div><label>To</label><input type="date" id="periodTo" onchange="renderPayroll()"/></div>
+    </div>
+    <div class="stat-cards">
+      <div class="stat-card"><div class="stat-num" id="statHours">--</div><div class="stat-lbl">Total Hours</div></div>
+      <div class="stat-card"><div class="stat-num" id="statEmps">--</div><div class="stat-lbl">Employees</div></div>
+      <div class="stat-card"><div class="stat-num" id="statDays">--</div><div class="stat-lbl">Work Days</div></div>
+    </div>
+    <div id="payrollTable"></div>
+    <div class="btn-row-right"><button class="btn-secondary" onclick="exportCSV()">⬇ Export CSV</button></div>
+  </div>
+
+  <!-- LOG TAB -->
+  <div id="tab-log" class="tab-content">
+    <div id="logTable"></div>
+  </div>
+
+  <!-- EMPLOYEES TAB -->
+  <div id="tab-employees" class="tab-content">
+    <p class="section-title">Staff List</p>
+    <div class="emp-list" id="empList"></div>
+    <p class="section-title">Add New Employee</p>
+    <div class="add-emp-row">
+      <input type="text" id="newEmpName" placeholder="Employee name…"/>
+      <input type="number" id="newEmpBreak" placeholder="Break min" min="0" max="120" style="width:110px;"/>
+      <button class="btn-primary" onclick="addEmployee()">Add</button>
+    </div>
+    <p style="font-size:12px;color:var(--muted);">Break min = minutes deducted per shift. Pa default: 60 min.</p>
+  </div>
+
+  <!-- SETTINGS TAB -->
+  <div id="tab-settings" class="tab-content">
+    <p class="section-title">Security</p>
+    <div class="pass-row">
+      <input type="password" id="newPass" placeholder="New 4-digit passcode" maxlength="4"/>
+      <button class="btn-primary" onclick="changePass()">Update</button>
+    </div>
+    <div id="passMsg" style="font-size:12px;color:var(--in-color);margin-top:6px;min-height:18px;"></div>
+    <p class="section-title" style="margin-top:24px;">Data</p>
+    <div class="setting-item">
+      <div><div class="setting-label">Export All Records</div><div class="setting-sub">Full raw log as CSV</div></div>
+      <button class="btn-secondary" onclick="exportFullCSV()">Export</button>
+    </div>
+  </div>
+</div>
+
+<!-- BOTTOM NAV -->
+<nav class="nav-bar">
+  <button class="nav-btn active" id="nav-clock" onclick="navTo('clock')">
+    <span class="nav-icon">🕐</span>Clock In
+  </button>
+  <button class="nav-btn" id="nav-admin" onclick="navTo('admin')">
+    <span class="nav-icon">📊</span>Admin
+  </button>
+</nav>
+
+<script>
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzHP_z39d1HLEv-y0KSwA1Ce8PPx8ptC3a0N7ODMMJ3Ju9lpuWyXOK1gxliFObZQnM6/exec';
+
+// Storage keys (for settings only — records live in Sheets)
+const K_EMPS   = 'ejpm_employees';
+const K_BREAKS = 'ejpm_breakrules';
+const K_PASS   = 'ejpm_admin_pass';
+
+const DEFAULT_EMPS   = ['Pa','Freddy','Rojelio','Walter','Cherry','Aun','Aoy'];
+const DEFAULT_BREAKS = { Pa: 60 };
+const DEFAULT_PASS   = '2742';
+
+function getEmps()   { try { return JSON.parse(localStorage.getItem(K_EMPS)) || DEFAULT_EMPS; } catch(e){ return DEFAULT_EMPS; } }
+function getBreaks() { try { return JSON.parse(localStorage.getItem(K_BREAKS)) || DEFAULT_BREAKS; } catch(e){ return DEFAULT_BREAKS; } }
+function getPass()   { return localStorage.getItem(K_PASS) || DEFAULT_PASS; }
+function saveEmps(d)   { localStorage.setItem(K_EMPS, JSON.stringify(d)); }
+function saveBreaks(d) { localStorage.setItem(K_BREAKS, JSON.stringify(d)); }
+function savePass(p)   { localStorage.setItem(K_PASS, p); }
+
+// Cached sheet records
+let sheetCache = null;
+let cacheTime  = 0;
+
+async function getSheetRecords(force) {
+  const AGE = 60000; // re-fetch if older than 60s
+  if (!force && sheetCache && (Date.now() - cacheTime < AGE)) return sheetCache;
+  try {
+    const res = await fetch(SCRIPT_URL + '?t=' + Date.now());
+    const raw = await res.json();
+    sheetCache = raw
+      .filter(r => r.Timestamp && r.Name && r.Action)
+      .map(r => ({
+        id: r.Timestamp,
+        name: r.Name,
+        action: r.Action,
+        timestamp: new Date(r.Timestamp).toISOString()
+      }));
+    cacheTime = Date.now();
+    return sheetCache;
+  } catch(err) {
+    return sheetCache || [];
+  }
+}
+
+// Clock
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clockTime').textContent =
+    String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+  document.getElementById('clockDate').textContent =
+    now.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+}
+updateClock();
+setInterval(updateClock, 5000);
+
+function populateSelect() {
+  const sel = document.getElementById('empSelect');
+  sel.innerHTML = '<option value="" disabled selected>Select your name\u2026</option>';
+  getEmps().forEach(e => {
+    const opt = document.createElement('option');
+    opt.value = opt.textContent = e;
+    sel.appendChild(opt);
+  });
+}
+populateSelect();
+
+// Screen manager
+let adminUnlocked = false;
+const ALL_SCREENS = ['clockScreen','loadingScreen','successScreen','passcodeScreen','adminScreen'];
+function showScreen(id) {
+  ALL_SCREENS.forEach(s => document.getElementById(s).classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function navTo(dest) {
+  document.getElementById('nav-clock').classList.toggle('active', dest === 'clock');
+  document.getElementById('nav-admin').classList.toggle('active', dest === 'admin');
+  if (dest === 'clock') { showScreen('clockScreen'); return; }
+  if (adminUnlocked) { showScreen('adminScreen'); renderAdminTabs(); }
+  else { resetPasscode(); showScreen('passcodeScreen'); }
+}
+
+// Clock action — POST to Google Sheets
+async function doClockAction(action) {
+  const name = document.getElementById('empSelect').value;
+  if (!name) { alert('Please select your name first.'); return; }
+  showScreen('loadingScreen');
+  try {
+    await fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ name, action }),
+      mode: 'no-cors'
+    });
+  } catch(err) {
+    showScreen('clockScreen');
+    alert('Could not save. Check your internet connection.');
+    return;
+  }
+  // Bust cache so next admin load pulls fresh
+  sheetCache = null;
+
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const dateStr = now.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+  const icon = document.getElementById('successIcon');
+  icon.textContent = action === 'IN' ? '👋' : '🚪';
+  icon.className = 'success-icon ' + (action === 'IN' ? 'in' : 'out');
+  document.getElementById('successTitle').textContent = action === 'IN' ? 'Clocked In!' : 'Clocked Out!';
+  document.getElementById('successSub').textContent = name;
+  document.getElementById('successTime').textContent = dateStr + ' · ' + timeStr;
+  document.getElementById('empSelect').value = '';
+  showScreen('successScreen');
+}
+
+// Passcode
+let pcInput = '';
+function resetPasscode() { pcInput = ''; document.getElementById('passcodeError').textContent = ''; updateDots(); }
+function updateDots() { for (let i=0;i<4;i++) document.getElementById('d'+i).classList.toggle('filled', i < pcInput.length); }
+function numPress(d) {
+  if (pcInput.length >= 4) return;
+  pcInput += d;
+  updateDots();
+  if (pcInput.length === 4) {
+    setTimeout(() => {
+      if (pcInput === getPass()) {
+        adminUnlocked = true; pcInput = ''; updateDots();
+        showScreen('adminScreen');
+        document.getElementById('nav-admin').classList.add('active');
+        document.getElementById('nav-clock').classList.remove('active');
+        renderAdminTabs();
+      } else {
+        document.getElementById('passcodeError').textContent = 'Incorrect passcode. Try again.';
+        pcInput = ''; setTimeout(updateDots, 150);
+      }
+    }, 200);
+  }
+}
+function numDel() { if (pcInput.length > 0) { pcInput = pcInput.slice(0,-1); updateDots(); } }
+function lockAdmin() { adminUnlocked = false; navTo('clock'); }
+
+// Admin tabs
+let activeTab = 'payroll';
+function switchTab(e, name) {
+  activeTab = name;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  e.target.classList.add('active');
+  document.getElementById('tab-'+name).classList.add('active');
+  renderAdminTabs();
+}
+function renderAdminTabs() {
+  if (activeTab === 'payroll') renderPayroll();
+  else if (activeTab === 'log') renderLog();
+  else if (activeTab === 'employees') renderEmployees();
+}
+async function refreshData() {
+  sheetCache = null;
+  renderAdminTabs();
+}
+
+// Payroll engine
+function buildSessions(entries, breakRules) {
+  const byEmp = {};
+  entries.forEach(e => { if (!byEmp[e.name]) byEmp[e.name] = []; byEmp[e.name].push(e); });
+  const sessions = [];
+  for (const emp in byEmp) {
+    const rows = byEmp[emp].sort((a,b) => new Date(a.timestamp)-new Date(b.timestamp));
+    let i = 0;
+    while (i < rows.length) {
+      if (rows[i].action === 'IN') {
+        const inTime = new Date(rows[i].timestamp);
+        let outTime = null;
+        for (let j=i+1; j<rows.length; j++) {
+          if (rows[j].action === 'OUT') { outTime = new Date(rows[j].timestamp); i=j+1; break; }
+        }
+        if (!outTime) { i++; continue; }
+        const durMs   = outTime - inTime;
+        const breakMs = (breakRules[emp] || 0) * 60000;
+        const totalMs = Math.max(0, durMs - breakMs);
+        sessions.push({ emp, date: inTime, inTime, outTime, durMs, totalMs });
+      } else { i++; }
+    }
+  }
+  return sessions;
+}
+function fmtDur(ms) { if (ms < 0) return '0h 0m'; return Math.floor(ms/3600000)+'h '+Math.floor((ms%3600000)/60000)+'m'; }
+function fmtTime(d) { return d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
+function fmtDate(d) { return d.toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'numeric'}); }
+
+async function renderPayroll() {
+  const fromEl = document.getElementById('periodFrom');
+  const toEl   = document.getElementById('periodTo');
+  if (!fromEl.value || !toEl.value) {
+    const now = new Date(); const day = now.getDate();
+    let from, to;
+    if (day <= 15) { from = new Date(now.getFullYear(),now.getMonth(),1); to = new Date(now.getFullYear(),now.getMonth(),15); }
+    else { from = new Date(now.getFullYear(),now.getMonth(),16); to = new Date(now.getFullYear(),now.getMonth()+1,0); }
+    fromEl.value = from.toISOString().slice(0,10);
+    toEl.value   = to.toISOString().slice(0,10);
+  }
+  const fromDate = new Date(fromEl.value+'T00:00:00');
+  const toDate   = new Date(toEl.value+'T23:59:59');
+
+  document.getElementById('payrollTable').innerHTML = '<div class="loading-inline"><div class="spinner-sm"></div>Loading records from Google Sheets\u2026</div>';
+  document.getElementById('statHours').textContent = '--';
+  document.getElementById('statEmps').textContent  = '--';
+  document.getElementById('statDays').textContent  = '--';
+
+  const allLog = await getSheetRecords();
+  const breaks = getBreaks();
+  const filtered = allLog.filter(e => { const d=new Date(e.timestamp); return d>=fromDate && d<=toDate; });
+  const sessions  = buildSessions(filtered, breaks);
+  const empSet    = [...new Set(sessions.map(s=>s.emp))].sort();
+
+  const totalMs = sessions.reduce((a,s)=>a+s.totalMs,0);
+  document.getElementById('statHours').textContent = (totalMs/3600000).toFixed(1)+'h';
+  document.getElementById('statEmps').textContent  = empSet.length;
+  document.getElementById('statDays').textContent  = new Set(sessions.map(s=>fmtDate(s.date))).size;
+
+  const container = document.getElementById('payrollTable');
+  if (sessions.length === 0) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div>No records in this period.</div>';
+    return;
+  }
+
+  let html = '<div class="tbl-wrap"><table><thead><tr><th>Employee</th><th>Days</th><th>Raw Hours</th><th>Total</th></tr></thead><tbody>';
+  let grandDur=0, grandTotal=0;
+  empSet.forEach(emp => {
+    const es = sessions.filter(s=>s.emp===emp);
+    const eDays  = new Set(es.map(s=>fmtDate(s.date))).size;
+    const eDur   = es.reduce((a,s)=>a+s.durMs,0);
+    const eTot   = es.reduce((a,s)=>a+s.totalMs,0);
+    grandDur+=eDur; grandTotal+=eTot;
+    const note = breaks[emp] ? ' <span style="font-size:11px;color:var(--muted);">(-'+breaks[emp]+'m/shift)</span>' : '';
+    html += '<tr><td><strong>'+emp+'</strong>'+note+'</td><td>'+eDays+'</td><td>'+fmtDur(eDur)+'</td><td>'+fmtDur(eTot)+'</td></tr>';
+  });
+  html += '<tr class="total-row"><td>TOTAL</td><td>—</td><td>'+fmtDur(grandDur)+'</td><td>'+fmtDur(grandTotal)+'</td></tr>';
+  html += '</tbody></table></div>';
+
+  empSet.forEach(emp => {
+    const es = sessions.filter(s=>s.emp===emp).sort((a,b)=>a.date-b.date);
+    html += '<p class="section-title" style="margin-top:18px;">'+emp+'</p>';
+    html += '<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>In</th><th>Out</th><th>Raw</th><th>Total</th></tr></thead><tbody>';
+    let tot=0;
+    es.forEach(s => { tot+=s.totalMs; html += '<tr><td>'+fmtDate(s.date)+'</td><td>'+fmtTime(s.inTime)+'</td><td>'+fmtTime(s.outTime)+'</td><td>'+fmtDur(s.durMs)+'</td><td>'+fmtDur(s.totalMs)+'</td></tr>'; });
+    html += '<tr class="total-row"><td colspan="4">Total</td><td>'+fmtDur(tot)+'</td></tr>';
+    html += '</tbody></table></div>';
+  });
+  container.innerHTML = html;
+}
+
+async function renderLog() {
+  document.getElementById('logTable').innerHTML = '<div class="loading-inline"><div class="spinner-sm"></div>Loading\u2026</div>';
+  const log = (await getSheetRecords()).slice().reverse();
+  if (log.length === 0) { document.getElementById('logTable').innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div>No records yet.</div>'; return; }
+  let html = '<div class="tbl-wrap"><table><thead><tr><th>#</th><th>Name</th><th>Action</th><th>Date & Time</th></tr></thead><tbody>';
+  log.forEach((e,i) => {
+    const d = new Date(e.timestamp);
+    const dt = d.toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' ' + fmtTime(d);
+    html += '<tr><td style="color:var(--muted);font-size:12px;">'+(log.length-i)+'</td><td><strong>'+e.name+'</strong></td><td><span class="badge badge-'+e.action.toLowerCase()+'">'+e.action+'</span></td><td style="font-family:\'DM Mono\',monospace;font-size:12px;">'+dt+'</td></tr>';
+  });
+  html += '</tbody></table></div>';
+  document.getElementById('logTable').innerHTML = html;
+}
+
+function renderEmployees() {
+  const emps = getEmps(); const breaks = getBreaks();
+  const container = document.getElementById('empList');
+  if (emps.length === 0) { container.innerHTML = '<div class="empty-state">No employees yet.</div>'; return; }
+  container.innerHTML = emps.map(emp => {
+    const bMin = breaks[emp] || 0;
+    const bHtml = bMin > 0 ? '<span class="break-badge">-'+bMin+'m/shift</span>' : '<span style="font-size:12px;color:var(--muted);">No deduction</span>';
+    return '<div class="emp-item"><div class="emp-name">'+emp+'</div><div class="emp-actions">'+bHtml+'<button onclick="toggleBreak(\''+emp+'\')" class="btn-secondary" style="padding:6px 10px;font-size:12px;">'+(bMin>0?'Remove break':'Add -60m')+'</button><button onclick="removeEmployee(\''+emp+'\')" class="btn-danger" style="padding:6px 10px;font-size:12px;">✕</button></div></div>';
+  }).join('');
+}
+
+function toggleBreak(emp) {
+  const b = getBreaks(); if (b[emp]) delete b[emp]; else b[emp] = 60;
+  saveBreaks(b); renderEmployees();
+}
+function addEmployee() {
+  const name = document.getElementById('newEmpName').value.trim();
+  const bMin = parseInt(document.getElementById('newEmpBreak').value) || 0;
+  if (!name) { alert('Enter a name.'); return; }
+  const emps = getEmps();
+  if (emps.includes(name)) { alert('Already exists.'); return; }
+  emps.push(name); saveEmps(emps);
+  if (bMin > 0) { const b = getBreaks(); b[name] = bMin; saveBreaks(b); }
+  document.getElementById('newEmpName').value = '';
+  document.getElementById('newEmpBreak').value = '';
+  renderEmployees(); populateSelect();
+}
+function removeEmployee(emp) {
+  if (!confirm('Remove '+emp+'?')) return;
+  saveEmps(getEmps().filter(e=>e!==emp));
+  renderEmployees(); populateSelect();
+}
+
+async function exportCSV() {
+  const fromVal = document.getElementById('periodFrom').value;
+  const toVal   = document.getElementById('periodTo').value;
+  if (!fromVal || !toVal) { alert('Set a period first.'); return; }
+  const fromDate = new Date(fromVal+'T00:00:00');
+  const toDate   = new Date(toVal+'T23:59:59');
+  const allLog   = await getSheetRecords();
+  const breaks   = getBreaks();
+  const filtered = allLog.filter(e=>{ const d=new Date(e.timestamp); return d>=fromDate&&d<=toDate; });
+  const sessions = buildSessions(filtered, breaks).sort((a,b)=>a.emp.localeCompare(b.emp)||a.date-b.date);
+  let csv = 'Employee,Date,Clock In,Clock Out,Raw Hours,Total Hours\n';
+  sessions.forEach(s => {
+    csv += '"'+s.emp+'","'+fmtDate(s.date)+'","'+fmtTime(s.inTime)+'","'+fmtTime(s.outTime)+'",'+
+      (s.durMs/3600000).toFixed(2)+','+(s.totalMs/3600000).toFixed(2)+'\n';
+  });
+  dlCSV(csv, 'ejpm_payroll_'+fromVal+'_'+toVal+'.csv');
+}
+
+async function exportFullCSV() {
+  const log = await getSheetRecords();
+  let csv = 'Timestamp,Name,Action\n';
+  log.forEach(e => { csv += '"'+new Date(e.timestamp).toLocaleString('en-US')+'","'+e.name+'","'+e.action+'"\n'; });
+  dlCSV(csv, 'ejpm_clocklog_full.csv');
+}
+
+function dlCSV(csv, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download = name; a.click();
+}
+
+function changePass() {
+  const p = document.getElementById('newPass').value.trim();
+  if (!/^\d{4}$/.test(p)) { document.getElementById('passMsg').style.color='var(--danger)'; document.getElementById('passMsg').textContent='Must be exactly 4 digits.'; return; }
+  savePass(p);
+  document.getElementById('newPass').value = '';
+  document.getElementById('passMsg').style.color = 'var(--in-color)';
+  document.getElementById('passMsg').textContent = '✓ Passcode updated!';
+  setTimeout(()=>{ document.getElementById('passMsg').textContent=''; }, 2500);
+}
+</script>
+</body>
+</html>
