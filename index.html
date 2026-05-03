@@ -369,9 +369,11 @@ async function getSheetRecords(force){
     const res=await fetch(SCRIPT_URL+'?t='+Date.now());
     const raw=await res.json();
     sheetCache=raw.filter(r=>r.Timestamp&&r.Name&&r.Action).map(r=>({
-      id:String(r.Timestamp), name:r.Name, action:r.Action,
-      timestamp:new Date(r.Timestamp).toISOString(),
-      raw_ts:String(r.Timestamp)
+      row: r._row,           // actual sheet row number — used for edit/delete
+      name: r.Name,
+      action: r.Action,
+      timestamp: new Date(r.Timestamp).toISOString(),
+      raw_ts: String(r.Timestamp)
     }));
     cacheTime=Date.now();
     return sheetCache;
@@ -404,7 +406,12 @@ updateClock(); setInterval(updateClock,5000);
 
 function populateSelect(){
   const emps=getEmps();
-  ['empSelect','addName','editName'].forEach(id=>{
+  // Clock screen
+  const es=document.getElementById('empSelect');
+  es.innerHTML='<option value="" disabled selected>Select your name\u2026</option>';
+  emps.forEach(e=>{ const o=document.createElement('option'); o.value=o.textContent=e; es.appendChild(o); });
+  // Add record name + Edit modal name — employee names only, preserve current value
+  ['addName','editName'].forEach(id=>{
     const sel=document.getElementById(id);
     if(!sel) return;
     const prev=sel.value;
@@ -412,10 +419,6 @@ function populateSelect(){
     emps.forEach(e=>{ const o=document.createElement('option'); o.value=o.textContent=e; sel.appendChild(o); });
     if(prev) sel.value=prev;
   });
-  // empSelect placeholder
-  const es=document.getElementById('empSelect');
-  es.innerHTML='<option value="" disabled selected>Select your name\u2026</option>';
-  emps.forEach(e=>{ const o=document.createElement('option'); o.value=o.textContent=e; es.appendChild(o); });
 }
 populateSelect();
 
@@ -632,7 +635,7 @@ async function addRecord(){
 async function deleteRecord(eJson){
   const e=JSON.parse(eJson);
   if(!confirm('Delete this record?\n\n'+e.name+' · '+e.action+' · '+new Date(e.timestamp).toLocaleString('en-US'))) return;
-  await sheetPost({action_type:'deleteRow',timestamp:e.raw_ts,name:e.name,action:e.action});
+  await sheetPost({action_type:'deleteRow', row_number: e.row});
   await renderLog();
 }
 
@@ -641,6 +644,7 @@ let editingRecord=null;
 function openEditModal(eJson){
   editingRecord=JSON.parse(eJson);
   populateSelect();
+  // Set values AFTER populateSelect so editAction options are still IN/OUT
   document.getElementById('editName').value=editingRecord.name;
   document.getElementById('editAction').value=editingRecord.action;
   document.getElementById('editDatetime').value=toDatetimeLocal(editingRecord.timestamp);
@@ -659,13 +663,11 @@ async function saveEdit(){
   const newTs=new Date(newDt).toLocaleString('en-US',{timeZone:'America/Los_Angeles'});
   closeEditModal();
   await sheetPost({
-    action_type:'editRow',
-    old_timestamp:editingRecord.raw_ts,
-    old_name:editingRecord.name,
-    old_action:editingRecord.action,
-    new_timestamp:newTs,
-    new_name:newName,
-    new_action:newAction
+    action_type: 'editRow',
+    row_number:  editingRecord.row,
+    new_timestamp: newTs,
+    new_name:    newName,
+    new_action:  newAction
   });
   await renderLog();
 }
