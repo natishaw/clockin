@@ -130,14 +130,9 @@ tr.total-row td{background:var(--accent-light);font-weight:700;color:var(--accen
 .refresh-btn:hover{text-decoration:underline;}
 
 /* LOG TABLE action buttons */
-.icon-btn{background:none;border:none;cursor:pointer;padding:4px 6px;border-radius:6px;font-size:15px;transition:background 0.15s;}
-.icon-btn:hover{background:#F0F0EC;}
-.icon-btn.del:hover{background:#FEE8E8;}
 
-/* ADD RECORD FORM */
-.add-record-card{background:var(--card);border:1.5px solid var(--accent);border-radius:12px;padding:18px 16px;margin-bottom:16px;}
-.add-record-card .form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;}
-.add-record-card .form-row.full{grid-template-columns:1fr;}
+
+
 
 
 
@@ -242,32 +237,6 @@ tr.total-row td{background:var(--accent-light);font-weight:700;color:var(--accen
 
   <!-- LOG -->
   <div id="tab-log" class="tab-content">
-    <!-- Add record form -->
-    <div class="add-record-card">
-      <div style="font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:12px;">+ Add Record</div>
-      <div class="form-row">
-        <div>
-          <label>Employee</label>
-          <select id="addName"><option value="" disabled selected>Name…</option></select>
-        </div>
-        <div>
-          <label>Action</label>
-          <select id="addAction">
-            <option value="IN">IN</option>
-            <option value="OUT">OUT</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-row full">
-        <div>
-          <label>Date &amp; Time</label>
-          <input type="datetime-local" id="addDatetime"/>
-        </div>
-      </div>
-      <div class="btn-row-right" style="margin-top:4px;">
-        <button type="button" class="btn-primary" onclick="addRecord()" style="padding:10px 20px;">Add to Sheet</button>
-      </div>
-    </div>
     <div id="logTable"></div>
   </div>
 
@@ -316,7 +285,7 @@ tr.total-row td{background:var(--accent-light);font-weight:700;color:var(--accen
 
 <script>
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzHP_z39d1HLEv-y0KSwA1Ce8PPx8ptC3a0N7ODMMJ3Ju9lpuWyXOK1gxliFObZQnM6/exec';
-const APP_VERSION = '1.6.0';
+const APP_VERSION = '1.7.0';
 document.getElementById('versionDisplay').textContent = APP_VERSION;
 
 const K_EMPS='ejpm_employees', K_BREAKS='ejpm_breakrules', K_PASS='ejpm_admin_pass';
@@ -392,14 +361,8 @@ function populateSelect(){
 }
 populateSelect();
 
-// Set datetime-local to now
-function setNow(inputId){
-  const n=new Date();
-  n.setSeconds(0,0);
-  const offset=n.getTimezoneOffset()*60000;
-  document.getElementById(inputId).value=new Date(n-offset).toISOString().slice(0,16);
-}
-setNow('addDatetime');
+
+
 
 // Screen manager
 let adminUnlocked=false;
@@ -571,7 +534,7 @@ async function renderLog(){
     document.getElementById('logTable').innerHTML='<div class="empty-state"><div class="empty-icon">📭</div>No records yet.</div>';
     return;
   }
-  let html='<div class="tbl-wrap"><table><thead><tr><th>#</th><th>Name</th><th>Action</th><th>Date &amp; Time</th><th style="width:44px;"></th></tr></thead><tbody>';
+  let html='<div class="tbl-wrap"><table><thead><tr><th>#</th><th>Name</th><th>Action</th><th>Date &amp; Time</th></tr></thead><tbody>';
   logRecords.forEach((e,i)=>{
     const d=new Date(e.timestamp);
     const dt=d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'})+' '+fmtTime(d);
@@ -580,38 +543,11 @@ async function renderLog(){
       <td><strong>${e.name}</strong></td>
       <td><span class="badge badge-${e.action.toLowerCase()}">${e.action}</span></td>
       <td style="font-family:'DM Mono',monospace;font-size:11px;">${dt}</td>
-      <td style="text-align:center;">
-        <button type="button" class="icon-btn del" onclick="deleteRecord(${i})" title="Delete">🗑</button>
-      </td>
     </tr>`;
   });
   html+='</tbody></table></div>';
   document.getElementById('logTable').innerHTML=html;
 }
-
-// ── ADD RECORD ──
-async function addRecord(){
-  const name=document.getElementById('addName').value;
-  const action=document.getElementById('addAction').value;
-  const dt=document.getElementById('addDatetime').value;
-  if(!name||!name.trim()){alert('Please select an employee.');return;}
-  if(!dt){alert('Please set a date and time.');return;}
-  const tsStr=dtLocalToLocaleString(dt);
-  await sheetPost({action_type:'addRow',timestamp:tsStr,name,action});
-  setNow('addDatetime');
-  await renderLog();
-}
-
-// ── DELETE RECORD ──
-async function deleteRecord(idx){
-  const e=logRecords[idx];
-  if(!e){alert('Record not found.');return;}
-  if(!confirm('Delete this record?\n\n'+e.name+' · '+e.action+'\n'+new Date(e.timestamp).toLocaleString('en-US'))) return;
-  await sheetPost({action_type:'deleteRow', row_number: e.row});
-  await renderLog();
-}
-
-
 
 
 // ── EMPLOYEES ──
