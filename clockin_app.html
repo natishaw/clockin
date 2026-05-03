@@ -7,409 +7,487 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
-  :root {
-    --bg: #F5F4F0;
-    --card: #FFFFFF;
-    --ink: #1A1A1A;
-    --muted: #888880;
-    --in-color: #1A6B3C;
-    --in-bg: #E8F5EE;
-    --in-border: #A8D5B5;
-    --out-color: #7A2020;
-    --out-bg: #FAE8E8;
-    --out-border: #E5AAAA;
-    --accent: #2C5282;
-    --radius: 16px;
-    --shadow: 0 2px 16px rgba(0,0,0,0.08);
-  }
+:root {
+  --bg: #F5F4F0;
+  --card: #FFFFFF;
+  --ink: #1A1A1A;
+  --muted: #888880;
+  --in-color: #1A6B3C;
+  --in-bg: #E8F5EE;
+  --in-border: #A8D5B5;
+  --out-color: #7A2020;
+  --out-bg: #FAE8E8;
+  --out-border: #E5AAAA;
+  --accent: #2C5282;
+  --danger: #C53030;
+  --radius: 16px;
+  --shadow: 0 2px 16px rgba(0,0,0,0.08);
+}
 
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
 
-  body {
-    font-family: 'DM Sans', sans-serif;
-    background: var(--bg);
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px 16px;
-  }
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+}
 
-  /* ── CLOCK-IN SCREEN ── */
-  .clock-screen {
-    width: 100%;
-    max-width: 400px;
-  }
+/* ── CLOCK-IN SCREEN ── */
+.clock-screen { width: 100%; max-width: 400px; }
 
-  .top-bar {
-    text-align: center;
-    margin-bottom: 32px;
-  }
+.top-bar { text-align: center; margin-bottom: 32px; }
 
-  .time-display {
-    font-size: 48px;
-    font-weight: 600;
-    letter-spacing: -2px;
-    color: var(--ink);
-    line-height: 1;
-  }
+.time-display {
+  font-size: 48px;
+  font-weight: 600;
+  letter-spacing: -2px;
+  color: var(--ink);
+  line-height: 1;
+}
 
-  .date-display {
-    font-size: 14px;
-    color: var(--muted);
-    margin-top: 6px;
-    font-weight: 400;
-    letter-spacing: 0.5px;
-  }
+.date-display {
+  font-size: 14px;
+  color: var(--muted);
+  margin-top: 6px;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+}
 
-  .card {
-    background: var(--card);
-    border-radius: var(--radius);
-    padding: 28px 24px;
-    box-shadow: var(--shadow);
-  }
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 28px 24px;
+  box-shadow: var(--shadow);
+}
 
-  label {
-    display: block;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 1.2px;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 8px;
-  }
+label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
 
-  select {
-    width: 100%;
-    padding: 14px 16px;
-    border: 1.5px solid #E8E8E4;
-    border-radius: 10px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 17px;
-    font-weight: 500;
-    color: var(--ink);
-    background: #FAFAF8;
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23888880' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 14px center;
-    cursor: pointer;
-    transition: border-color 0.2s;
-  }
+select {
+  width: 100%;
+  padding: 14px 16px;
+  border: 1.5px solid #E8E8E4;
+  border-radius: 10px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--ink);
+  background: #FAFAF8;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23888880' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
 
-  select:focus {
-    outline: none;
-    border-color: var(--accent);
-    background-color: #fff;
-  }
+select:focus { outline: none; border-color: var(--accent); background-color: #fff; }
 
-  .divider {
-    text-align: center;
-    margin: 24px 0 20px;
-    position: relative;
-  }
+.divider {
+  text-align: center;
+  margin: 24px 0 20px;
+  position: relative;
+}
 
-  .divider::before {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 0; right: 0;
-    height: 1px;
-    background: #EEEEE8;
-  }
+.divider::before {
+  content: '';
+  position: absolute;
+  top: 50%; left: 0; right: 0;
+  height: 1px;
+  background: #EEEEE8;
+}
 
-  .divider span {
-    position: relative;
-    background: var(--card);
-    padding: 0 12px;
-    font-size: 11px;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    color: var(--muted);
-    font-weight: 600;
-  }
+.divider span {
+  position: relative;
+  background: var(--card);
+  padding: 0 12px;
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
 
-  .action-label {
-    display: block;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 1.2px;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 12px;
-  }
+.action-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
 
-  .btn-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-  }
+.btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
-  .btn {
-    border: none;
-    border-radius: 12px;
-    padding: 20px 10px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 17px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    letter-spacing: 0.3px;
-  }
+.btn {
+  border: none;
+  border-radius: 12px;
+  padding: 20px 10px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  letter-spacing: 0.3px;
+}
 
-  .btn-in {
-    background: var(--in-bg);
-    color: var(--in-color);
-    border: 1.5px solid var(--in-border);
-  }
+.btn-in  { background: var(--in-bg);  color: var(--in-color);  border: 1.5px solid var(--in-border); }
+.btn-out { background: var(--out-bg); color: var(--out-color); border: 1.5px solid var(--out-border); }
+.btn:active { transform: scale(0.97); }
+.btn:hover  { filter: brightness(0.96); }
+.btn .icon  { display: block; font-size: 26px; margin-bottom: 4px; }
 
-  .btn-out {
-    background: var(--out-bg);
-    color: var(--out-color);
-    border: 1.5px solid var(--out-border);
-  }
+/* ── SUCCESS SCREEN ── */
+.success-screen {
+  display: none;
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
+}
 
-  .btn:active {
-    transform: scale(0.97);
-  }
+.success-icon {
+  width: 80px; height: 80px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  margin: 0 auto 20px;
+}
 
-  .btn:hover {
-    filter: brightness(0.96);
-  }
+.success-icon.in  { background: var(--in-bg); }
+.success-icon.out { background: var(--out-bg); }
 
-  .btn .icon {
-    display: block;
-    font-size: 26px;
-    margin-bottom: 4px;
-  }
+.success-title { font-size: 28px; font-weight: 700; color: var(--ink); margin-bottom: 8px; }
+.success-sub   { font-size: 15px; color: var(--muted); margin-bottom: 6px; }
 
-  /* ── SUCCESS SCREEN ── */
-  .success-screen {
-    display: none;
-    width: 100%;
-    max-width: 400px;
-    text-align: center;
-  }
+.success-time {
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  color: var(--muted);
+  background: #F0F0EC;
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 6px;
+  margin-bottom: 28px;
+}
 
-  .success-icon {
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 36px;
-    margin: 0 auto 20px;
-  }
+.btn-again {
+  background: var(--ink);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 16px 32px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.btn-again:hover { opacity: 0.85; }
 
-  .success-icon.in  { background: var(--in-bg);  }
-  .success-icon.out { background: var(--out-bg);  }
+/* ── LOADING STATE ── */
+.loading {
+  display: none;
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
+}
 
-  .success-title {
-    font-size: 28px;
-    font-weight: 700;
-    color: var(--ink);
-    margin-bottom: 8px;
-  }
+.spinner {
+  width: 48px; height: 48px;
+  border: 3px solid #E8E8E4;
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin: 0 auto 16px;
+}
 
-  .success-sub {
-    font-size: 15px;
-    color: var(--muted);
-    margin-bottom: 6px;
-  }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading p { color: var(--muted); font-size: 15px; }
 
-  .success-time {
-    font-family: 'DM Mono', monospace;
-    font-size: 13px;
-    color: var(--muted);
-    background: #F0F0EC;
-    display: inline-block;
-    padding: 4px 12px;
-    border-radius: 6px;
-    margin-bottom: 28px;
-  }
+/* ── ADMIN TOGGLE ── */
+.admin-toggle {
+  position: fixed;
+  bottom: 20px; right: 20px;
+  background: var(--ink);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 44px; height: 44px;
+  font-size: 18px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  z-index: 100;
+}
 
-  .btn-again {
-    background: var(--ink);
-    color: #fff;
-    border: none;
-    border-radius: 12px;
-    padding: 16px 32px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 16px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: opacity 0.2s;
-  }
+/* ── ADMIN PANEL ── */
+.admin-panel {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 200;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.admin-panel.open { display: flex; }
 
-  .btn-again:hover { opacity: 0.85; }
+.admin-box {
+  background: #fff;
+  border-radius: 20px;
+  padding: 28px 24px;
+  width: 100%;
+  max-width: 420px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
 
-  /* ── LOADING STATE ── */
-  .loading {
-    display: none;
-    width: 100%;
-    max-width: 400px;
-    text-align: center;
-  }
+.admin-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+.admin-header h2 { font-size: 18px; font-weight: 700; color: var(--ink); }
 
-  .spinner {
-    width: 48px;
-    height: 48px;
-    border: 3px solid #E8E8E4;
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    margin: 0 auto 16px;
-  }
+.close-btn {
+  background: #F0F0EC;
+  border: none;
+  border-radius: 8px;
+  width: 32px; height: 32px;
+  font-size: 16px;
+  cursor: pointer;
+}
 
-  @keyframes spin { to { transform: rotate(360deg); } }
+/* Admin tabs */
+.admin-tabs {
+  display: flex;
+  gap: 4px;
+  background: #F5F4F0;
+  border-radius: 10px;
+  padding: 4px;
+  margin-bottom: 20px;
+}
 
-  .loading p { color: var(--muted); font-size: 15px; }
+.tab-btn {
+  flex: 1;
+  padding: 8px 4px;
+  border: none;
+  border-radius: 7px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--muted);
+  transition: all 0.15s;
+}
+.tab-btn.active {
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+}
 
-  /* ── ADMIN / QR PANEL ── */
-  .admin-toggle {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    background: var(--ink);
-    color: #fff;
-    border: none;
-    border-radius: 50%;
-    width: 44px;
-    height: 44px;
-    font-size: 18px;
-    cursor: pointer;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-    z-index: 100;
-  }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
 
-  .admin-panel {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.5);
-    z-index: 200;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-  }
+.admin-section { margin-bottom: 20px; }
 
-  .admin-panel.open { display: flex; }
+.admin-section label {
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  display: block;
+  margin-bottom: 6px;
+}
 
-  .admin-box {
-    background: #fff;
-    border-radius: 20px;
-    padding: 28px 24px;
-    width: 100%;
-    max-width: 420px;
-    max-height: 90vh;
-    overflow-y: auto;
-  }
+.admin-input {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1.5px solid #E8E8E4;
+  border-radius: 10px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  color: var(--ink);
+}
+.admin-input:focus { outline: none; border-color: var(--accent); }
 
-  .admin-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-  }
+.btn-save {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 20px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  margin-top: 4px;
+  transition: opacity 0.2s;
+}
+.btn-save:hover { opacity: 0.88; }
 
-  .admin-header h2 {
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--ink);
-  }
+#qr-container { display: flex; justify-content: center; margin-top: 12px; }
+#qr-container canvas, #qr-container img { border-radius: 8px; }
 
-  .close-btn {
-    background: #F0F0EC;
-    border: none;
-    border-radius: 8px;
-    width: 32px;
-    height: 32px;
-    font-size: 16px;
-    cursor: pointer;
-  }
+.qr-url {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: var(--muted);
+  word-break: break-all;
+  text-align: center;
+  margin-top: 10px;
+  background: #F5F4F0;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
 
-  .admin-section { margin-bottom: 20px; }
+.status-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  background: #ccc;
+}
+.status-dot.connected { background: #1A6B3C; }
 
-  .admin-section label {
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--muted);
-    display: block;
-    margin-bottom: 6px;
-  }
+.conn-status { font-size: 12px; color: var(--muted); margin-top: 8px; }
 
-  .admin-input {
-    width: 100%;
-    padding: 11px 14px;
-    border: 1.5px solid #E8E8E4;
-    border-radius: 10px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 14px;
-    color: var(--ink);
-  }
+/* ── EMPLOYEE LIST EDITOR ── */
+.emp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+  min-height: 40px;
+}
 
-  .admin-input:focus {
-    outline: none;
-    border-color: var(--accent);
-  }
+.emp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #FAFAF8;
+  border: 1.5px solid #E8E8E4;
+  border-radius: 10px;
+  padding: 8px 10px;
+  animation: slideIn 0.15s ease;
+}
 
-  .btn-save {
-    background: var(--accent);
-    color: #fff;
-    border: none;
-    border-radius: 10px;
-    padding: 12px 20px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    width: 100%;
-    margin-top: 4px;
-    transition: opacity 0.2s;
-  }
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
 
-  .btn-save:hover { opacity: 0.88; }
+.emp-row .drag-handle {
+  color: #ccc;
+  cursor: grab;
+  font-size: 14px;
+  user-select: none;
+  flex-shrink: 0;
+}
 
-  #qr-container {
-    display: flex;
-    justify-content: center;
-    margin-top: 12px;
-  }
+.emp-row input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+  outline: none;
+  min-width: 0;
+}
 
-  #qr-container canvas, #qr-container img {
-    border-radius: 8px;
-  }
+.emp-row input::placeholder { color: #ccc; }
 
-  .qr-url {
-    font-family: 'DM Mono', monospace;
-    font-size: 11px;
-    color: var(--muted);
-    word-break: break-all;
-    text-align: center;
-    margin-top: 10px;
-    background: #F5F4F0;
-    padding: 8px 10px;
-    border-radius: 8px;
-  }
+.emp-delete {
+  background: none;
+  border: none;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+.emp-delete:hover { color: var(--danger); }
 
-  .status-dot {
-    display: inline-block;
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    margin-right: 6px;
-    background: #ccc;
-  }
+.btn-add-emp {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #F5F4F0;
+  border: 1.5px dashed #D8D8D4;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  width: 100%;
+  transition: all 0.15s;
+  margin-bottom: 12px;
+}
+.btn-add-emp:hover { background: #EEEEE8; border-color: #BBBBAA; color: var(--ink); }
 
-  .status-dot.connected { background: #1A6B3C; }
+.emp-count {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 8px;
+  letter-spacing: 0.3px;
+}
 
-  .conn-status {
-    font-size: 12px;
-    color: var(--muted);
-    margin-top: 8px;
-  }
+.btn-save-emps {
+  background: var(--in-bg);
+  color: var(--in-color);
+  border: 1.5px solid var(--in-border);
+  border-radius: 10px;
+  padding: 12px 20px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  transition: opacity 0.2s;
+}
+.btn-save-emps:hover { opacity: 0.85; }
+
+.save-feedback {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--in-color);
+  margin-top: 8px;
+  height: 18px;
+  transition: opacity 0.3s;
+}
+
+/* drag-over highlight */
+.emp-row.drag-over {
+  border-color: var(--accent);
+  background: #EEF2FF;
+}
 </style>
 </head>
 <body>
@@ -420,26 +498,20 @@
     <div class="time-display" id="clock">--:--</div>
     <div class="date-display" id="dateDisp">--</div>
   </div>
-
   <div class="card">
     <label for="empSelect">Who are you?</label>
     <select id="empSelect">
       <option value="" disabled selected>Select your name…</option>
-      <option value="Pa">Pa</option>
-      <option value="Freddy">Freddy</option>
-      <option value="Rojelio">Rojelio</option>
-      <option value="Walter">Walter</option>
-      <option value="Fon">Fon</option>
     </select>
 
     <div class="divider"><span>action</span></div>
-
     <span class="action-label">What are you doing?</span>
+
     <div class="btn-row">
-      <button class="btn btn-in"  onclick="submit('IN')">
+      <button class="btn btn-in"  onclick="submitAction('IN')">
         <span class="icon">👋</span> Clock In
       </button>
-      <button class="btn btn-out" onclick="submit('OUT')">
+      <button class="btn btn-out" onclick="submitAction('OUT')">
         <span class="icon">🚪</span> Clock Out
       </button>
     </div>
@@ -456,74 +528,138 @@
 <div class="success-screen" id="successScreen">
   <div class="success-icon" id="successIcon"></div>
   <div class="success-title" id="successTitle"></div>
-  <div class="success-sub"  id="successSub"></div>
-  <div class="success-time" id="successTime"></div>
-  <button class="btn-again" onclick="reset()">Done ✓</button>
+  <div class="success-sub"   id="successSub"></div>
+  <div class="success-time"  id="successTime"></div>
+  <button class="btn-again" onclick="resetApp()">Done ✓</button>
 </div>
 
 <!-- ── ADMIN TOGGLE ── -->
-<button class="admin-toggle" onclick="toggleAdmin()" title="Admin / QR">⚙️</button>
+<button class="admin-toggle" onclick="toggleAdmin()" title="Admin / Settings">⚙️</button>
 
 <!-- ── ADMIN PANEL ── -->
 <div class="admin-panel" id="adminPanel">
   <div class="admin-box">
+
     <div class="admin-header">
-      <h2>⚙️ Setup & QR Code</h2>
+      <h2>⚙️ Settings</h2>
       <button class="close-btn" onclick="toggleAdmin()">✕</button>
     </div>
 
-    <div class="admin-section">
-      <label>Google Apps Script Web App URL</label>
-      <input class="admin-input" type="text" id="scriptUrl"
-             placeholder="https://script.google.com/macros/s/..." />
-      <div class="conn-status" id="connStatus">
-        <span class="status-dot" id="statusDot"></span>Not configured
+    <!-- Tabs -->
+    <div class="admin-tabs">
+      <button class="tab-btn active" onclick="switchTab('tab-url',  this)">Script URL</button>
+      <button class="tab-btn"        onclick="switchTab('tab-emps', this)">Employees</button>
+      <button class="tab-btn"        onclick="switchTab('tab-qr',   this)">QR Code</button>
+    </div>
+
+    <!-- TAB: Script URL -->
+    <div class="tab-panel active" id="tab-url">
+      <div class="admin-section">
+        <label>Google Apps Script Web App URL</label>
+        <input class="admin-input" type="text" id="scriptUrl"
+               placeholder="https://script.google.com/macros/s/..." />
+        <div class="conn-status" id="connStatus">
+          <span class="status-dot" id="statusDot"></span>Not configured
+        </div>
+      </div>
+      <button class="btn-save" onclick="saveConfig()">Save URL</button>
+
+      <div style="margin-top:20px; padding:14px; background:#F5F4F0; border-radius:10px;">
+        <p style="font-size:12px; color:#666; line-height:1.8;">
+          <strong>Setup steps:</strong><br>
+          1. Open Google Sheets → Extensions → Apps Script<br>
+          2. Paste the <code>GoogleAppsScript_Code.gs</code> contents<br>
+          3. Deploy → New Deployment → Web App<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;• Execute as: <strong>Me</strong><br>
+          &nbsp;&nbsp;&nbsp;&nbsp;• Who has access: <strong>Anyone</strong><br>
+          4. Copy the Web App URL and paste above<br>
+          5. Click Save
+        </p>
       </div>
     </div>
 
-    <button class="btn-save" onclick="saveConfig()">Save & Generate QR</button>
+    <!-- TAB: Employees -->
+    <div class="tab-panel" id="tab-emps">
+      <div class="emp-count" id="empCount">0 employees</div>
+      <div class="emp-list" id="empList"></div>
 
-    <div id="qr-container" style="margin-top:20px;"></div>
-    <div class="qr-url" id="qrUrlDisplay" style="display:none;"></div>
+      <button class="btn-add-emp" onclick="addEmployee()">
+        <span style="font-size:18px; line-height:1;">+</span> Add employee
+      </button>
 
-    <div style="margin-top:20px; padding:14px; background:#F5F4F0; border-radius:10px;">
-      <p style="font-size:12px; color:#666; line-height:1.6;">
-        <strong>Setup steps:</strong><br>
-        1. Open Google Sheets → Extensions → Apps Script<br>
-        2. Paste the <code>GoogleAppsScript_Code.gs</code> file contents<br>
-        3. Deploy → New Deployment → Web App (Anyone)<br>
-        4. Copy the URL and paste it above<br>
-        5. Click Save → scan the QR with your phone to test!
-      </p>
+      <button class="btn-save-emps" onclick="saveEmployees()">Save Employees</button>
+      <div class="save-feedback" id="saveFeedback"></div>
     </div>
+
+    <!-- TAB: QR Code -->
+    <div class="tab-panel" id="tab-qr">
+      <p style="font-size:13px; color:var(--muted); margin-bottom:16px; line-height:1.6;">
+        Scan this QR code with your phone to open the app.
+        The URL and Script URL are encoded so phones auto-configure.
+      </p>
+      <div id="qr-container"></div>
+      <div class="qr-url" id="qrUrlDisplay" style="display:none;"></div>
+      <button class="btn-save" onclick="generateQR()" style="margin-top:16px;">Regenerate QR</button>
+    </div>
+
   </div>
 </div>
 
 <script>
-// ── CONFIG ──────────────────────────────────────────────
-const STORAGE_KEY = 'clockapp_script_url';
-let SCRIPT_URL = localStorage.getItem(STORAGE_KEY) || '';
+// ── STORAGE KEYS ────────────────────────────────────────────
+const KEY_URL  = 'clockapp_script_url';
+const KEY_EMPS = 'clockapp_employees';
 
-// ── CLOCK ────────────────────────────────────────────────
+const DEFAULT_EMPLOYEES = ['Pa', 'Freddy', 'Rojelio', 'Walter', 'Fon'];
+
+// ── STATE ───────────────────────────────────────────────────
+let SCRIPT_URL = localStorage.getItem(KEY_URL) || '';
+let employees  = JSON.parse(localStorage.getItem(KEY_EMPS) || 'null') || [...DEFAULT_EMPLOYEES];
+
+// ── INIT ────────────────────────────────────────────────────
+(function init() {
+  // Auto-load script URL from QR param
+  const params   = new URLSearchParams(window.location.search);
+  const urlParam = params.get('url');
+  if (urlParam && !SCRIPT_URL) {
+    SCRIPT_URL = urlParam;
+    localStorage.setItem(KEY_URL, urlParam);
+  }
+
+  renderEmployeeSelect();
+  updateClock();
+  setInterval(updateClock, 10000);
+})();
+
+// ── CLOCK ───────────────────────────────────────────────────
 function updateClock() {
   const now = new Date();
   const h = now.getHours().toString().padStart(2,'0');
   const m = now.getMinutes().toString().padStart(2,'0');
   document.getElementById('clock').textContent = `${h}:${m}`;
   document.getElementById('dateDisp').textContent = now.toLocaleDateString('en-US', {
-    weekday:'long', month:'long', day:'numeric'
+    weekday: 'long', month: 'long', day: 'numeric'
   });
 }
-updateClock();
-setInterval(updateClock, 10000);
 
-// ── SUBMIT ────────────────────────────────────────────────
-async function submit(action) {
+// ── EMPLOYEE SELECT ─────────────────────────────────────────
+function renderEmployeeSelect() {
+  const sel = document.getElementById('empSelect');
+  sel.innerHTML = '<option value="" disabled selected>Select your name…</option>';
+  employees.forEach(name => {
+    if (name.trim()) {
+      const opt = document.createElement('option');
+      opt.value = name.trim();
+      opt.textContent = name.trim();
+      sel.appendChild(opt);
+    }
+  });
+}
+
+// ── SUBMIT ──────────────────────────────────────────────────
+async function submitAction(action) {
   const name = document.getElementById('empSelect').value;
-  if (!name) {
-    alert('Please select your name first.');
-    return;
-  }
+  if (!name) { alert('Please select your name first.'); return; }
   if (!SCRIPT_URL) {
     alert('Please configure the Google Apps Script URL first.\nTap ⚙️ at the bottom right.');
     return;
@@ -532,22 +668,22 @@ async function submit(action) {
   show('loadingScreen');
 
   try {
-    const res = await fetch(SCRIPT_URL, {
-      method: 'POST',
+    await fetch(SCRIPT_URL, {
+      method:  'POST',
       headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ name, action }),
-      mode: 'no-cors'
+      body:    JSON.stringify({ name, action }),
+      mode:    'no-cors'
     });
 
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
-    const dateStr = now.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+    const now     = new Date();
+    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const dateStr = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
-    document.getElementById('successIcon').textContent   = action === 'IN' ? '👋' : '🚪';
-    document.getElementById('successIcon').className     = `success-icon ${action === 'IN' ? 'in' : 'out'}`;
-    document.getElementById('successTitle').textContent  = action === 'IN' ? 'Clocked In!' : 'Clocked Out!';
-    document.getElementById('successSub').textContent    = name;
-    document.getElementById('successTime').textContent   = `${dateStr}  ·  ${timeStr}`;
+    document.getElementById('successIcon').textContent = action === 'IN' ? '👋' : '🚪';
+    document.getElementById('successIcon').className   = `success-icon ${action === 'IN' ? 'in' : 'out'}`;
+    document.getElementById('successTitle').textContent = action === 'IN' ? 'Clocked In!' : 'Clocked Out!';
+    document.getElementById('successSub').textContent   = name;
+    document.getElementById('successTime').textContent  = `${dateStr} · ${timeStr}`;
 
     show('successScreen');
   } catch (err) {
@@ -556,72 +692,182 @@ async function submit(action) {
   }
 }
 
-function reset() {
+function resetApp() {
   document.getElementById('empSelect').value = '';
   show('clockScreen');
 }
 
 function show(id) {
-  ['clockScreen','loadingScreen','successScreen'].forEach(s => {
-    document.getElementById(s).style.display = s === id
-      ? (s === 'clockScreen' ? 'block' : 'flex')
-      : 'none';
+  ['clockScreen', 'loadingScreen', 'successScreen'].forEach(s => {
+    const el = document.getElementById(s);
+    if (s === id) {
+      el.style.display = s === 'clockScreen' ? 'block' : 'flex';
+    } else {
+      el.style.display = 'none';
+    }
   });
-  if (id === 'loadingScreen') document.getElementById('loadingScreen').style.display = 'block';
-  if (id === 'successScreen') document.getElementById('successScreen').style.display = 'block';
 }
 
-// ── ADMIN ────────────────────────────────────────────────
+// ── ADMIN PANEL ─────────────────────────────────────────────
 function toggleAdmin() {
   const panel = document.getElementById('adminPanel');
   panel.classList.toggle('open');
   if (panel.classList.contains('open')) {
     document.getElementById('scriptUrl').value = SCRIPT_URL;
-    if (SCRIPT_URL) generateQR(SCRIPT_URL);
     updateStatus(!!SCRIPT_URL);
+    renderEmpEditor();
+    if (SCRIPT_URL) generateQR();
   }
 }
 
+function switchTab(tabId, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(tabId).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ── SCRIPT URL CONFIG ────────────────────────────────────────
 function saveConfig() {
   const url = document.getElementById('scriptUrl').value.trim();
   if (!url) { alert('Please enter the script URL.'); return; }
   SCRIPT_URL = url;
-  localStorage.setItem(STORAGE_KEY, url);
+  localStorage.setItem(KEY_URL, url);
   updateStatus(true);
-  generateQR(url);
+  generateQR();
 }
 
 function updateStatus(ok) {
   document.getElementById('statusDot').className = `status-dot ${ok ? 'connected' : ''}`;
   document.getElementById('connStatus').innerHTML =
-    `<span class="status-dot ${ok ? 'connected' : ''}"></span>${ok ? 'URL saved' : 'Not configured'}`;
+    `<span class="status-dot ${ok ? 'connected' : ''}"></span>${ok ? 'URL saved ✓' : 'Not configured'}`;
 }
 
-function generateQR(url) {
+// ── QR CODE ──────────────────────────────────────────────────
+function generateQR() {
   const container = document.getElementById('qr-container');
   container.innerHTML = '';
+
+  const baseUrl = window.location.href.split('?')[0];
+  const qrUrl   = SCRIPT_URL
+    ? baseUrl + '?url=' + encodeURIComponent(SCRIPT_URL)
+    : baseUrl;
+
   new QRCode(container, {
-    text: window.location.href.split('?')[0] + '?url=' + encodeURIComponent(url),
-    width: 200,
-    height: 200,
-    colorDark: '#1A1A1A',
-    colorLight: '#FFFFFF',
+    text:         qrUrl,
+    width:        200,
+    height:       200,
+    colorDark:    '#1A1A1A',
+    colorLight:   '#FFFFFF',
     correctLevel: QRCode.CorrectLevel.M
   });
+
   const disp = document.getElementById('qrUrlDisplay');
-  disp.textContent = window.location.href.split('?')[0];
+  disp.textContent = baseUrl;
   disp.style.display = 'block';
 }
 
-// ── AUTO-LOAD URL FROM QR PARAM ───────────────────────────
-(function() {
-  const params = new URLSearchParams(window.location.search);
-  const urlParam = params.get('url');
-  if (urlParam && !SCRIPT_URL) {
-    SCRIPT_URL = urlParam;
-    localStorage.setItem(STORAGE_KEY, urlParam);
-  }
-})();
+// ── EMPLOYEE EDITOR ──────────────────────────────────────────
+function renderEmpEditor() {
+  const list = document.getElementById('empList');
+  list.innerHTML = '';
+
+  employees.forEach((name, i) => {
+    const row = document.createElement('div');
+    row.className = 'emp-row';
+    row.draggable = true;
+    row.dataset.index = i;
+
+    row.innerHTML = `
+      <span class="drag-handle" title="Drag to reorder">⠿</span>
+      <input type="text" value="${escHtml(name)}" placeholder="Employee name"
+             oninput="employees[${i}] = this.value" />
+      <button class="emp-delete" onclick="removeEmployee(${i})" title="Remove">×</button>
+    `;
+
+    // Drag-and-drop
+    row.addEventListener('dragstart', onDragStart);
+    row.addEventListener('dragover',  onDragOver);
+    row.addEventListener('drop',      onDrop);
+    row.addEventListener('dragend',   onDragEnd);
+
+    list.appendChild(row);
+  });
+
+  updateEmpCount();
+}
+
+function addEmployee() {
+  employees.push('');
+  renderEmpEditor();
+  // Focus the new input
+  const inputs = document.querySelectorAll('.emp-row input');
+  if (inputs.length) inputs[inputs.length - 1].focus();
+}
+
+function removeEmployee(i) {
+  employees.splice(i, 1);
+  renderEmpEditor();
+}
+
+function saveEmployees() {
+  // Filter blanks and trim
+  employees = employees.map(n => n.trim()).filter(Boolean);
+  // Deduplicate
+  employees = [...new Set(employees)];
+
+  localStorage.setItem(KEY_EMPS, JSON.stringify(employees));
+  renderEmployeeSelect();
+  renderEmpEditor();
+
+  const fb = document.getElementById('saveFeedback');
+  fb.textContent = `✓ Saved ${employees.length} employee${employees.length !== 1 ? 's' : ''}`;
+  fb.style.opacity = '1';
+  setTimeout(() => { fb.style.opacity = '0'; }, 2500);
+}
+
+function updateEmpCount() {
+  const n = employees.filter(e => e.trim()).length;
+  document.getElementById('empCount').textContent = `${n} employee${n !== 1 ? 's' : ''}`;
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+// ── DRAG-AND-DROP REORDER ────────────────────────────────────
+let dragSrcIndex = null;
+
+function onDragStart(e) {
+  dragSrcIndex = parseInt(this.dataset.index);
+  this.style.opacity = '0.4';
+}
+
+function onDragOver(e) {
+  e.preventDefault();
+  document.querySelectorAll('.emp-row').forEach(r => r.classList.remove('drag-over'));
+  this.classList.add('drag-over');
+}
+
+function onDrop(e) {
+  e.preventDefault();
+  const destIndex = parseInt(this.dataset.index);
+  if (dragSrcIndex === null || dragSrcIndex === destIndex) return;
+
+  const moved = employees.splice(dragSrcIndex, 1)[0];
+  employees.splice(destIndex, 0, moved);
+  renderEmpEditor();
+}
+
+function onDragEnd() {
+  this.style.opacity = '';
+  document.querySelectorAll('.emp-row').forEach(r => r.classList.remove('drag-over'));
+  dragSrcIndex = null;
+}
 </script>
 </body>
 </html>
