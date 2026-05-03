@@ -162,6 +162,7 @@ tr.total-row td{background:var(--accent-light);font-weight:700;color:var(--accen
   <div class="top-bar">
     <div class="time-display" id="clockTime">--:--</div>
     <div class="date-display" id="clockDate">--</div>
+    <div style="margin-top:10px;font-size:11px;color:#C8C8C0;letter-spacing:0.5px;">EJPM v<span id="versionDisplay"></span></div>
   </div>
   <div class="card">
     <label for="empSelect">Who are you?</label>
@@ -272,7 +273,7 @@ tr.total-row td{background:var(--accent-light);font-weight:700;color:var(--accen
         </div>
       </div>
       <div class="btn-row-right" style="margin-top:4px;">
-        <button class="btn-primary" onclick="addRecord()" style="padding:10px 20px;">Add to Sheet</button>
+        <button type="button" class="btn-primary" onclick="addRecord()" style="padding:10px 20px;">Add to Sheet</button>
       </div>
     </div>
     <div id="logTable"></div>
@@ -348,6 +349,8 @@ tr.total-row td{background:var(--accent-light);font-weight:700;color:var(--accen
 
 <script>
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzHP_z39d1HLEv-y0KSwA1Ce8PPx8ptC3a0N7ODMMJ3Ju9lpuWyXOK1gxliFObZQnM6/exec';
+const APP_VERSION = '1.4.0';
+document.getElementById('versionDisplay').textContent = APP_VERSION;
 
 const K_EMPS='ejpm_employees', K_BREAKS='ejpm_breakrules', K_PASS='ejpm_admin_pass';
 const DEFAULT_EMPS=['Pa','Freddy','Rojelio','Walter','Cherry','Aun','Aoy'];
@@ -610,8 +613,8 @@ async function renderLog(){
       <td><span class="badge badge-${e.action.toLowerCase()}">${e.action}</span></td>
       <td style="font-family:'DM Mono',monospace;font-size:11px;">${dt}</td>
       <td style="text-align:center;white-space:nowrap;">
-        <button class="icon-btn edit" onclick="openEditModal(decodeURIComponent('${eJson}'))" title="Edit">✏️</button>
-        <button class="icon-btn del" onclick="deleteRecord(decodeURIComponent('${eJson}'))" title="Delete">🗑</button>
+        <button type="button" class="icon-btn edit" onclick="openEditModal(decodeURIComponent('${eJson}'))" title="Edit">✏️</button>
+        <button type="button" class="icon-btn del" onclick="deleteRecord(decodeURIComponent('${eJson}'))" title="Delete">🗑</button>
       </td>
     </tr>`;
   });
