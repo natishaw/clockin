@@ -349,7 +349,7 @@ tr.total-row td{background:var(--accent-light);font-weight:700;color:var(--accen
 
 <script>
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzHP_z39d1HLEv-y0KSwA1Ce8PPx8ptC3a0N7ODMMJ3Ju9lpuWyXOK1gxliFObZQnM6/exec';
-const APP_VERSION = '1.4.0';
+const APP_VERSION = '1.5.0';
 document.getElementById('versionDisplay').textContent = APP_VERSION;
 
 const K_EMPS='ejpm_employees', K_BREAKS='ejpm_breakrules', K_PASS='ejpm_admin_pass';
@@ -596,25 +596,29 @@ async function renderPayroll(){
 }
 
 // ── LOG TAB ──
+let logRecords = []; // module-level store — no data in onclick strings
+
 async function renderLog(){
   document.getElementById('logTable').innerHTML='<div class="loading-inline"><div class="spinner-sm"></div>Loading\u2026</div>';
-  const log=(await getSheetRecords()).slice().reverse();
+  const raw = await getSheetRecords();
+  logRecords = raw.slice().reverse(); // newest first
   populateSelect();
-  if(log.length===0){document.getElementById('logTable').innerHTML='<div class="empty-state"><div class="empty-icon">📭</div>No records yet.</div>';return;}
+  if(logRecords.length===0){
+    document.getElementById('logTable').innerHTML='<div class="empty-state"><div class="empty-icon">📭</div>No records yet.</div>';
+    return;
+  }
   let html='<div class="tbl-wrap"><table><thead><tr><th>#</th><th>Name</th><th>Action</th><th>Date &amp; Time</th><th style="width:72px;text-align:center;">Edit</th></tr></thead><tbody>';
-  log.forEach((e,i)=>{
+  logRecords.forEach((e,i)=>{
     const d=new Date(e.timestamp);
     const dt=d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'})+' '+fmtTime(d);
-    const idx=log.length-i;
-    const eJson=encodeURIComponent(JSON.stringify(e));
     html+=`<tr>
-      <td style="color:var(--muted);font-size:12px;">${idx}</td>
+      <td style="color:var(--muted);font-size:12px;">${logRecords.length-i}</td>
       <td><strong>${e.name}</strong></td>
       <td><span class="badge badge-${e.action.toLowerCase()}">${e.action}</span></td>
       <td style="font-family:'DM Mono',monospace;font-size:11px;">${dt}</td>
       <td style="text-align:center;white-space:nowrap;">
-        <button type="button" class="icon-btn edit" onclick="openEditModal(decodeURIComponent('${eJson}'))" title="Edit">✏️</button>
-        <button type="button" class="icon-btn del" onclick="deleteRecord(decodeURIComponent('${eJson}'))" title="Delete">🗑</button>
+        <button type="button" class="icon-btn edit" onclick="openEditModal(${i})" title="Edit">✏️</button>
+        <button type="button" class="icon-btn del"  onclick="deleteRecord(${i})" title="Delete">🗑</button>
       </td>
     </tr>`;
   });
@@ -627,52 +631,73 @@ async function addRecord(){
   const name=document.getElementById('addName').value;
   const action=document.getElementById('addAction').value;
   const dt=document.getElementById('addDatetime').value;
-  if(!name||!dt){alert('Please fill in all fields.');return;}
-  const tsStr=new Date(dt).toLocaleString('en-US',{timeZone:'America/Los_Angeles'});
+  if(!name||!name.trim()){alert('Please select an employee.');return;}
+  if(!dt){alert('Please set a date and time.');return;}
+  const tsStr=dtLocalToLocaleString(dt);
   await sheetPost({action_type:'addRow',timestamp:tsStr,name,action});
   setNow('addDatetime');
   await renderLog();
 }
 
 // ── DELETE RECORD ──
-async function deleteRecord(eJson){
-  const e=JSON.parse(eJson);
-  if(!confirm('Delete this record?\n\n'+e.name+' · '+e.action+' · '+new Date(e.timestamp).toLocaleString('en-US'))) return;
+async function deleteRecord(idx){
+  const e=logRecords[idx];
+  if(!e){alert('Record not found.');return;}
+  if(!confirm('Delete this record?\n\n'+e.name+' · '+e.action+'\n'+new Date(e.timestamp).toLocaleString('en-US'))) return;
   await sheetPost({action_type:'deleteRow', row_number: e.row});
   await renderLog();
 }
 
 // ── EDIT MODAL ──
-let editingRecord=null;
-function openEditModal(eJson){
-  editingRecord=JSON.parse(eJson);
-  populateSelect();
-  // Set values AFTER populateSelect so editAction options are still IN/OUT
-  document.getElementById('editName').value=editingRecord.name;
-  document.getElementById('editAction').value=editingRecord.action;
-  document.getElementById('editDatetime').value=toDatetimeLocal(editingRecord.timestamp);
+let editingIdx=null;
+
+function openEditModal(idx){
+  editingIdx=idx;
+  const e=logRecords[idx];
+  if(!e) return;
+  // Populate name select, then set values — never touch editAction here
+  const sel=document.getElementById('editName');
+  const emps=getEmps();
+  sel.innerHTML='';
+  emps.forEach(emp=>{ const o=document.createElement('option'); o.value=o.textContent=emp; sel.appendChild(o); });
+  sel.value=e.name;
+  document.getElementById('editAction').value=e.action;
+  document.getElementById('editDatetime').value=toDatetimeLocal(e.timestamp);
   document.getElementById('editModal').classList.add('open');
 }
+
 function closeEditModal(){
   document.getElementById('editModal').classList.remove('open');
-  editingRecord=null;
+  editingIdx=null;
 }
+
 async function saveEdit(){
-  if(!editingRecord)return;
+  if(editingIdx===null) return;
+  const e=logRecords[editingIdx];
+  if(!e){closeEditModal();return;}
   const newName=document.getElementById('editName').value;
   const newAction=document.getElementById('editAction').value;
   const newDt=document.getElementById('editDatetime').value;
   if(!newName||!newDt){alert('Fill in all fields.');return;}
-  const newTs=new Date(newDt).toLocaleString('en-US',{timeZone:'America/Los_Angeles'});
+  const newTs=dtLocalToLocaleString(newDt);
   closeEditModal();
   await sheetPost({
-    action_type: 'editRow',
-    row_number:  editingRecord.row,
+    action_type:   'editRow',
+    row_number:    e.row,
     new_timestamp: newTs,
-    new_name:    newName,
-    new_action:  newAction
+    new_name:      newName,
+    new_action:    newAction
   });
   await renderLog();
+}
+
+// Convert datetime-local string (YYYY-MM-DDTHH:MM) to locale string
+// WITHOUT treating it as UTC — parse parts directly
+function dtLocalToLocaleString(dtLocal){
+  const [datePart, timePart] = dtLocal.split('T');
+  const [y,mo,d] = datePart.split('-').map(Number);
+  const [h,mi]   = timePart.split(':').map(Number);
+  return new Date(y, mo-1, d, h, mi).toLocaleString('en-US');
 }
 
 // ── EMPLOYEES ──
