@@ -22,6 +22,13 @@ function doPost(e) {
       return ok('added');
     }
 
+    // ── SAVE CONFIG (shared employee list + break rules) ──
+    if (data.action_type === 'saveConfig') {
+      PropertiesService.getScriptProperties()
+        .setProperty('CONFIG', JSON.stringify(data.config || {}));
+      return ok('config_saved');
+    }
+
     // ── DELETE ROW ──
     if (data.action_type === 'deleteRow') {
       const rows = sheet.getDataRange().getValues();
@@ -61,6 +68,16 @@ function doPost(e) {
 }
 
 function doGet(e) {
+  // ── CONFIG (shared employee list + break rules) ──
+  if (e && e.parameter && e.parameter.type === 'config') {
+    const raw = PropertiesService.getScriptProperties().getProperty('CONFIG');
+    let cfg = { employees: null, breaks: {} };
+    if (raw) { try { cfg = JSON.parse(raw); } catch (err) {} }
+    return ContentService
+      .createTextOutput(JSON.stringify(cfg))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   const rows = sheet.getDataRange().getValues();
   const headers = rows[0];

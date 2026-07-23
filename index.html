@@ -285,7 +285,7 @@ tr.total-row td{background:var(--accent-light);font-weight:700;color:var(--accen
 
 <script>
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzHP_z39d1HLEv-y0KSwA1Ce8PPx8ptC3a0N7ODMMJ3Ju9lpuWyXOK1gxliFObZQnM6/exec';
-const APP_VERSION = '1.7.0';
+const APP_VERSION = '1.8.0';
 document.getElementById('versionDisplay').textContent = APP_VERSION;
 
 const K_EMPS='ejpm_employees', K_BREAKS='ejpm_breakrules', K_PASS='ejpm_admin_pass';
@@ -299,6 +299,23 @@ function getPass(){return localStorage.getItem(K_PASS)||DEFAULT_PASS;}
 function saveEmps(d){localStorage.setItem(K_EMPS,JSON.stringify(d));}
 function saveBreaks(d){localStorage.setItem(K_BREAKS,JSON.stringify(d));}
 function savePass(p){localStorage.setItem(K_PASS,p);}
+
+// Shared config (employee list + break rules) — synced via Google Sheets backend.
+// localStorage acts as an offline cache/fallback.
+async function fetchConfig(){
+  try{
+    const res=await fetch(SCRIPT_URL+'?type=config&t='+Date.now());
+    const cfg=await res.json();
+    if(cfg&&Array.isArray(cfg.employees)){
+      saveEmps(cfg.employees);
+      saveBreaks(cfg.breaks||{});
+    }
+    return cfg;
+  }catch(e){return null;}
+}
+async function saveConfig(){
+  await sheetPost({action_type:'saveConfig',config:{employees:getEmps(),breaks:getBreaks()}});
+}
 
 // Sheet cache
 let sheetCache=null, cacheTime=0;
@@ -361,8 +378,14 @@ function populateSelect(){
 }
 populateSelect();
 
-
-
+// Pull the shared employee list from the backend on load, then refresh the UI.
+(async function loadConfig(){
+  const cfg=await fetchConfig();
+  if(cfg&&Array.isArray(cfg.employees)){
+    populateSelect();
+    if(adminUnlocked&&activeTab==='employees') renderEmployees();
+  }
+})();
 
 // Screen manager
 let adminUnlocked=false;
@@ -373,7 +396,7 @@ function navTo(dest){
   document.getElementById('nav-clock').classList.toggle('active',dest==='clock');
   document.getElementById('nav-admin').classList.toggle('active',dest==='admin');
   if(dest==='clock'){showScreen('clockScreen');return;}
-  if(adminUnlocked){showScreen('adminScreen');renderAdminTabs();}
+  if(adminUnlocked){enterAdmin();}
   else{resetPasscode();showScreen('passcodeScreen');}
 }
 
@@ -410,10 +433,7 @@ function numPress(d){
     setTimeout(()=>{
       if(pcInput===getPass()){
         adminUnlocked=true;pcInput='';updateDots();
-        showScreen('adminScreen');
-        document.getElementById('nav-admin').classList.add('active');
-        document.getElementById('nav-clock').classList.remove('active');
-        renderAdminTabs();
+        enterAdmin();
       }else{
         document.getElementById('passcodeError').textContent='Incorrect passcode. Try again.';
         pcInput='';setTimeout(updateDots,150);
@@ -439,7 +459,13 @@ function renderAdminTabs(){
   else if(activeTab==='log') renderLog();
   else if(activeTab==='employees') renderEmployees();
 }
-async function refreshData(){sheetCache=null;renderAdminTabs();}
+function enterAdmin(){
+  showScreen('adminScreen');
+  document.getElementById('nav-admin').classList.add('active');
+  document.getElementById('nav-clock').classList.remove('active');
+  fetchConfig().then(()=>{populateSelect();renderAdminTabs();});
+}
+async function refreshData(){sheetCache=null;await fetchConfig();populateSelect();renderAdminTabs();}
 
 // Utils
 function fmtDur(ms){if(ms<0)return'0h 0m';return Math.floor(ms/3600000)+'h '+Math.floor((ms%3600000)/60000)+'m';}
@@ -563,7 +589,7 @@ function renderEmployees(){
       '<button onclick="removeEmployee(\''+emp+'\')" class="btn-danger" style="padding:6px 10px;font-size:12px;">✕</button></div></div>';
   }).join('');
 }
-function toggleBreak(emp){const b=getBreaks();if(b[emp])delete b[emp];else b[emp]=60;saveBreaks(b);renderEmployees();}
+function toggleBreak(emp){const b=getBreaks();if(b[emp])delete b[emp];else b[emp]=60;saveBreaks(b);renderEmployees();saveConfig();}
 function addEmployee(){
   const name=document.getElementById('newEmpName').value.trim();
   const bMin=parseInt(document.getElementById('newEmpBreak').value)||0;
@@ -574,12 +600,13 @@ function addEmployee(){
   if(bMin>0){const b=getBreaks();b[name]=bMin;saveBreaks(b);}
   document.getElementById('newEmpName').value='';
   document.getElementById('newEmpBreak').value='';
-  renderEmployees();populateSelect();
+  renderEmployees();populateSelect();saveConfig();
 }
 function removeEmployee(emp){
   if(!confirm('Remove '+emp+'?'))return;
   saveEmps(getEmps().filter(e=>e!==emp));
-  renderEmployees();populateSelect();
+  const b=getBreaks();if(b[emp]){delete b[emp];saveBreaks(b);}
+  renderEmployees();populateSelect();saveConfig();
 }
 
 // ── EXPORT ──
