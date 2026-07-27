@@ -134,10 +134,18 @@ tr.total-row td{background:var(--accent-light);font-weight:700;color:var(--accen
 .refresh-btn:hover{text-decoration:underline;}
 
 /* LOG TABLE action buttons */
-
-
-
-
+.log-actions{display:flex;gap:6px;flex-wrap:nowrap;}
+.log-actions button{padding:5px 10px;font-size:11px;white-space:nowrap;}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:400;align-items:center;justify-content:center;padding:16px;}
+.modal-overlay.show{display:flex;}
+.modal-card{background:var(--card);border-radius:var(--radius);padding:24px;max-width:380px;width:100%;box-shadow:var(--shadow);}
+.modal-card h3{font-size:16px;font-weight:700;color:var(--ink);margin-bottom:16px;}
+.modal-card label{margin-top:12px;}
+.modal-card label:first-of-type{margin-top:0;}
+.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;}
+.preset-row{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
+.preset-btn{background:#F0F0EC;border:none;border-radius:8px;padding:8px 12px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;color:var(--ink);cursor:pointer;}
+.preset-btn:hover{background:#E4E4DC;}
 
 
 
@@ -180,7 +188,8 @@ tr.total-row td{background:var(--accent-light);font-weight:700;color:var(--accen
   <div class="success-title" id="successTitle"></div>
   <div class="success-sub" id="successSub"></div>
   <div class="success-time" id="successTime"></div>
-  <button class="btn-back" onclick="showScreen('clockScreen')">Done ✓</button>
+  <button class="btn-back" onclick="doneSuccess()">Done ✓</button>
+  <div class="success-sub" id="successCountdown" style="margin-top:14px;"></div>
 </div>
 
 <!-- PASSCODE -->
@@ -234,6 +243,11 @@ tr.total-row td{background:var(--accent-light);font-weight:700;color:var(--accen
   <!-- PAYROLL -->
   <div id="tab-payroll" class="tab-content">
     <p class="section-title">Period</p>
+    <div class="preset-row">
+      <button class="preset-btn" onclick="setPeriodPreset('this')">This period</button>
+      <button class="preset-btn" onclick="setPeriodPreset('last')">Last period</button>
+      <button class="preset-btn" onclick="setPeriodPreset('week')">This week</button>
+    </div>
     <div class="date-row">
       <div><label>From</label><input type="date" id="periodFrom" onchange="renderPayroll()"/></div>
       <div><label>To</label><input type="date" id="periodTo" onchange="renderPayroll()"/></div>
@@ -249,6 +263,16 @@ tr.total-row td{background:var(--accent-light);font-weight:700;color:var(--accen
 
   <!-- LOG -->
   <div id="tab-log" class="tab-content">
+    <p class="section-title">Add Missed Punch</p>
+    <div class="add-emp-row">
+      <select id="addName"><option value="" disabled selected>Name…</option></select>
+      <input type="datetime-local" id="addDatetime"/>
+      <select id="addAction" style="max-width:100px;flex:none;">
+        <option value="IN">IN</option>
+        <option value="OUT">OUT</option>
+      </select>
+      <button class="btn-primary" onclick="addMissedPunch()">Add</button>
+    </div>
     <div id="logTable"></div>
   </div>
 
@@ -282,6 +306,26 @@ tr.total-row td{background:var(--accent-light);font-weight:700;color:var(--accen
 </div>
 
 
+<!-- EDIT PUNCH MODAL -->
+<div class="modal-overlay" id="editModalOverlay">
+  <div class="modal-card">
+    <h3>Edit Punch</h3>
+    <label for="editName">Employee</label>
+    <select id="editName"><option value="" disabled selected>Name…</option></select>
+    <label for="editDatetime">Date &amp; Time</label>
+    <input type="datetime-local" id="editDatetime"/>
+    <label for="editAction">Action</label>
+    <select id="editAction">
+      <option value="IN">IN</option>
+      <option value="OUT">OUT</option>
+    </select>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeEditModal()">Cancel</button>
+      <button class="btn-primary" onclick="saveEditRecord()">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- SAVING TOAST -->
 <div class="saving-toast" id="savingToast">Saving…</div>
 
@@ -297,7 +341,7 @@ tr.total-row td{background:var(--accent-light);font-weight:700;color:var(--accen
 
 <script>
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzHP_z39d1HLEv-y0KSwA1Ce8PPx8ptC3a0N7ODMMJ3Ju9lpuWyXOK1gxliFObZQnM6/exec';
-const APP_VERSION = '1.10.0';
+const APP_VERSION = '1.11.0';
 document.getElementById('versionDisplay').textContent = APP_VERSION;
 
 const K_EMPS='ejpm_employees', K_BREAKS='ejpm_breakrules', K_PASS='ejpm_admin_pass';
@@ -370,7 +414,10 @@ function showToast(msg, duration){
 // Clock
 function updateClock(){
   const n=new Date();
-  document.getElementById('clockTime').textContent=String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0');
+  let h=n.getHours();
+  const ampm=h>=12?'PM':'AM';
+  h=h%12; if(h===0)h=12;
+  document.getElementById('clockTime').textContent=h+':'+String(n.getMinutes()).padStart(2,'0')+' '+ampm;
   document.getElementById('clockDate').textContent=n.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
 }
 updateClock(); setInterval(updateClock,5000);
@@ -449,11 +496,39 @@ const ALL=['clockScreen','loadingScreen','successScreen','passcodeScreen','admin
 function showScreen(id){ALL.forEach(s=>document.getElementById(s).classList.remove('active'));document.getElementById(id).classList.add('active');}
 
 function navTo(dest){
+  clearAutoReturn();
   document.getElementById('nav-clock').classList.toggle('active',dest==='clock');
   document.getElementById('nav-admin').classList.toggle('active',dest==='admin');
   if(dest==='clock'){showScreen('clockScreen');return;}
   if(adminUnlocked){enterAdmin();}
   else{resetPasscode();showScreen('passcodeScreen');}
+}
+
+// ── AUTO-RETURN (success screen) ──
+let autoReturnTimer=null, autoReturnInterval=null;
+function clearAutoReturn(){
+  if(autoReturnTimer){clearTimeout(autoReturnTimer);autoReturnTimer=null;}
+  if(autoReturnInterval){clearInterval(autoReturnInterval);autoReturnInterval=null;}
+  const cd=document.getElementById('successCountdown');
+  if(cd) cd.textContent='';
+}
+function startAutoReturn(){
+  clearAutoReturn();
+  let secs=3;
+  const cd=document.getElementById('successCountdown');
+  if(cd) cd.textContent='Returning in '+secs+'…';
+  autoReturnInterval=setInterval(()=>{
+    secs--;
+    if(secs>0&&cd) cd.textContent='Returning in '+secs+'…';
+  },1000);
+  autoReturnTimer=setTimeout(()=>{
+    clearAutoReturn();
+    showScreen('clockScreen');
+  },3000);
+}
+function doneSuccess(){
+  clearAutoReturn();
+  showScreen('clockScreen');
 }
 
 // Clock action
@@ -523,6 +598,7 @@ async function doClockAction(action){
       now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
     document.getElementById('empSelect').value='';
     showScreen('successScreen');
+    startAutoReturn();
   }catch(e){
     clearTimeout(timeoutId);
     showScreen('clockScreen');
@@ -621,6 +697,42 @@ function fmtDate(d){return d.toLocaleDateString('en-US',{month:'numeric',day:'nu
 
 
 function fromDatetimeLocal(s){return new Date(s).toLocaleString('en-US',{timeZone:'America/Los_Angeles'});}
+// Inverse-ish helper for pre-filling a datetime-local input from a Date (display only, doesn't touch storage format).
+function toDatetimeLocalValue(d){
+  const pad=n=>String(n).padStart(2,'0');
+  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes());
+}
+
+// ── PAYROLL PERIOD PRESETS ──
+function setPeriodPreset(which){
+  const now=new Date();
+  let from,to;
+  if(which==='this'){
+    const day=now.getDate();
+    if(day<=15){from=new Date(now.getFullYear(),now.getMonth(),1);to=new Date(now.getFullYear(),now.getMonth(),15);}
+    else{from=new Date(now.getFullYear(),now.getMonth(),16);to=new Date(now.getFullYear(),now.getMonth()+1,0);}
+  }else if(which==='last'){
+    const day=now.getDate();
+    if(day<=15){
+      const prevLastDay=new Date(now.getFullYear(),now.getMonth(),0); // last day of previous month
+      from=new Date(prevLastDay.getFullYear(),prevLastDay.getMonth(),16);
+      to=prevLastDay;
+    }else{
+      from=new Date(now.getFullYear(),now.getMonth(),1);
+      to=new Date(now.getFullYear(),now.getMonth(),15);
+    }
+  }else if(which==='week'){
+    const dow=now.getDay(); // 0=Sun..6=Sat
+    const diffToMonday=(dow===0?-6:1-dow);
+    from=new Date(now.getFullYear(),now.getMonth(),now.getDate()+diffToMonday);
+    to=now;
+  }
+  const pad=n=>String(n).padStart(2,'0');
+  const fmt=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+  document.getElementById('periodFrom').value=fmt(from);
+  document.getElementById('periodTo').value=fmt(to);
+  renderPayroll();
+}
 
 // ── PAYROLL ──
 function buildSessions(entries,breakRules){
@@ -707,7 +819,7 @@ async function renderLog(){
     document.getElementById('logTable').innerHTML='<div class="empty-state"><div class="empty-icon">📭</div>No records yet.</div>';
     return;
   }
-  let html='<div class="tbl-wrap"><table><thead><tr><th>#</th><th>Name</th><th>Action</th><th>Date &amp; Time</th></tr></thead><tbody>';
+  let html='<div class="tbl-wrap"><table><thead><tr><th>#</th><th>Name</th><th>Action</th><th>Date &amp; Time</th><th>Actions</th></tr></thead><tbody>';
   logRecords.forEach((e,i)=>{
     const d=new Date(e.timestamp);
     const dt=d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'})+' '+fmtTime(d);
@@ -716,10 +828,67 @@ async function renderLog(){
       <td><strong>${e.name}</strong></td>
       <td><span class="badge badge-${e.action.toLowerCase()}">${e.action}</span></td>
       <td style="font-family:'DM Mono',monospace;font-size:11px;">${dt}</td>
+      <td><div class="log-actions">
+        <button class="btn-secondary" onclick="openEditModal(${i})">Edit</button>
+        <button class="btn-danger" onclick="deleteLogRecord(${i})">Delete</button>
+      </div></td>
     </tr>`;
   });
   html+='</tbody></table></div>';
   document.getElementById('logTable').innerHTML=html;
+}
+
+// ── LOG TAB: add / edit / delete (backend match relies on raw_ts, exact name/action) ──
+async function addMissedPunch(){
+  const name=document.getElementById('addName').value;
+  const dtVal=document.getElementById('addDatetime').value;
+  const action=document.getElementById('addAction').value;
+  if(!name||!dtVal){alert('Select a name and date/time.');return;}
+  await sheetPost({action_type:'addRow', timestamp:fromDatetimeLocal(dtVal), name, action});
+  document.getElementById('addDatetime').value='';
+  sheetCache=null;
+  renderLog();
+}
+
+let editingLogIndex=null;
+function openEditModal(i){
+  const r=logRecords[i];
+  if(!r) return;
+  editingLogIndex=i;
+  populateSelect();
+  document.getElementById('editName').value=r.name;
+  document.getElementById('editAction').value=r.action;
+  document.getElementById('editDatetime').value=toDatetimeLocalValue(new Date(r.timestamp));
+  document.getElementById('editModalOverlay').classList.add('show');
+}
+function closeEditModal(){
+  document.getElementById('editModalOverlay').classList.remove('show');
+  editingLogIndex=null;
+}
+async function saveEditRecord(){
+  if(editingLogIndex===null) return;
+  const r=logRecords[editingLogIndex];
+  const name=document.getElementById('editName').value;
+  const action=document.getElementById('editAction').value;
+  const dtVal=document.getElementById('editDatetime').value;
+  if(!name||!dtVal){alert('Fill in all fields.');return;}
+  const payload={
+    action_type:'editRow',
+    old_timestamp:r.raw_ts, old_name:r.name, old_action:r.action,
+    new_timestamp:fromDatetimeLocal(dtVal), new_name:name, new_action:action
+  };
+  closeEditModal();
+  await sheetPost(payload);
+  sheetCache=null;
+  renderLog();
+}
+async function deleteLogRecord(i){
+  const r=logRecords[i];
+  if(!r) return;
+  if(!confirm('Delete this '+r.action+' punch for '+r.name+'?')) return;
+  await sheetPost({action_type:'deleteRow', timestamp:r.raw_ts, name:r.name, action:r.action});
+  sheetCache=null;
+  renderLog();
 }
 
 
