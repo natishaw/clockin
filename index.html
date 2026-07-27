@@ -157,8 +157,8 @@ tr.total-row td{background:var(--accent-light);font-weight:700;color:var(--accen
     <div class="divider"><span>action</span></div>
     <span style="display:block;font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-bottom:12px;">What are you doing?</span>
     <div class="btn-row">
-      <button class="btn btn-in" onclick="doClockAction('IN')"><span class="icon">👋</span>Clock In</button>
-      <button class="btn btn-out" onclick="doClockAction('OUT')"><span class="icon">🚪</span>Clock Out</button>
+      <button class="btn btn-in" id="btnClockIn" onclick="doClockAction('IN')"><span class="icon">👋</span>Clock In</button>
+      <button class="btn btn-out" id="btnClockOut" onclick="doClockAction('OUT')"><span class="icon">🚪</span>Clock Out</button>
     </div>
   </div>
 </div>
@@ -285,7 +285,7 @@ tr.total-row td{background:var(--accent-light);font-weight:700;color:var(--accen
 
 <script>
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzHP_z39d1HLEv-y0KSwA1Ce8PPx8ptC3a0N7ODMMJ3Ju9lpuWyXOK1gxliFObZQnM6/exec';
-const APP_VERSION = '1.8.0';
+const APP_VERSION = '1.9.0';
 document.getElementById('versionDisplay').textContent = APP_VERSION;
 
 const K_EMPS='ejpm_employees', K_BREAKS='ejpm_breakrules', K_PASS='ejpm_admin_pass';
@@ -310,11 +310,14 @@ async function fetchConfig(){
       saveEmps(cfg.employees);
       saveBreaks(cfg.breaks||{});
     }
+    if(cfg&&typeof cfg.pass==='string'&&/^\d{4}$/.test(cfg.pass)){
+      savePass(cfg.pass);
+    }
     return cfg;
   }catch(e){return null;}
 }
 async function saveConfig(){
-  await sheetPost({action_type:'saveConfig',config:{employees:getEmps(),breaks:getBreaks()}});
+  await sheetPost({action_type:'saveConfig',config:{employees:getEmps(),breaks:getBreaks(),pass:getPass()}});
 }
 
 // Sheet cache
@@ -401,25 +404,64 @@ function navTo(dest){
 }
 
 // Clock action
+let clockActionInFlight=false;
+let lastClockSubmit=null; // {name,action,time} — guards accidental identical re-submit
+function setClockButtonsDisabled(state){
+  const bi=document.getElementById('btnClockIn'), bo=document.getElementById('btnClockOut');
+  if(bi) bi.disabled=state;
+  if(bo) bo.disabled=state;
+}
 async function doClockAction(action){
   const name=document.getElementById('empSelect').value;
   if(!name){alert('Please select your name first.');return;}
+  if(clockActionInFlight) return; // double-tap guard: already processing a request
+  const nowMs=Date.now();
+  if(lastClockSubmit&&lastClockSubmit.name===name&&lastClockSubmit.action===action&&(nowMs-lastClockSubmit.time)<4000){
+    return; // guard accidental identical re-submit within a few seconds
+  }
+  clockActionInFlight=true;
+  setClockButtonsDisabled(true);
   showScreen('loadingScreen');
+  const controller=new AbortController();
+  const timeoutId=setTimeout(()=>controller.abort(),15000);
   try{
+    // Snapshot how many rows this employee already has (fresh read).
+    const before=await getSheetRecords(true);
+    const beforeCount=before.filter(r=>r.name===name).length;
+    // Send the punch. no-cors guarantees the write isn't blocked by POST CORS;
+    // awaiting it still waits for the server to finish appending the row.
     await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},
-      body:JSON.stringify({name,action,action_type:'clock'}),mode:'no-cors'});
-  }catch(e){showScreen('clockScreen');alert('Could not save. Check your internet connection.');return;}
-  sheetCache=null;
-  const now=new Date();
-  document.getElementById('successIcon').textContent=action==='IN'?'👋':'🚪';
-  document.getElementById('successIcon').className='success-icon '+(action==='IN'?'in':'out');
-  document.getElementById('successTitle').textContent=action==='IN'?'Clocked In!':'Clocked Out!';
-  document.getElementById('successSub').textContent=name;
-  document.getElementById('successTime').textContent=
-    now.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+' · '+
-    now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  document.getElementById('empSelect').value='';
-  showScreen('successScreen');
+      body:JSON.stringify({name,action,action_type:'clock'}),mode:'no-cors',signal:controller.signal});
+    // Confirm via the GET read path (known to work cross-origin): a new row must
+    // have landed for this employee, and its latest action must match what we sent.
+    sheetCache=null;
+    const after=await getSheetRecords(true);
+    clearTimeout(timeoutId);
+    const mine=after.filter(r=>r.name===name)
+      .sort((a,b)=>new Date(a.timestamp)-new Date(b.timestamp));
+    const newest=mine[mine.length-1];
+    if(mine.length<=beforeCount||!newest||newest.action!==action){
+      throw new Error('save_not_confirmed');
+    }
+    lastClockSubmit={name,action,time:Date.now()};
+    const now=new Date();
+    document.getElementById('successIcon').textContent=action==='IN'?'👋':'🚪';
+    document.getElementById('successIcon').className='success-icon '+(action==='IN'?'in':'out');
+    document.getElementById('successTitle').textContent=action==='IN'?'Clocked In!':'Clocked Out!';
+    document.getElementById('successSub').textContent=name;
+    document.getElementById('successTime').textContent=
+      now.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+' · '+
+      now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    document.getElementById('empSelect').value='';
+    showScreen('successScreen');
+  }catch(e){
+    clearTimeout(timeoutId);
+    showScreen('clockScreen');
+    alert('Could not save your clock '+(action==='IN'?'in':'out')+'. It was NOT recorded — please try again.');
+  }finally{
+    clockActionInFlight=false;
+    setClockButtonsDisabled(false);
+  }
 }
 
 // Passcode
@@ -643,6 +685,7 @@ function changePass(){
   document.getElementById('passMsg').style.color='var(--in-color)';
   document.getElementById('passMsg').textContent='✓ Passcode updated!';
   setTimeout(()=>document.getElementById('passMsg').textContent='',2500);
+  saveConfig();
 }
 </script>
 </body>
