@@ -58,7 +58,10 @@ select:focus,input:focus{outline:none;border-color:var(--accent);background-colo
 .success-icon.out{background:var(--out-bg);}
 .success-title{font-size:28px;font-weight:700;color:var(--ink);margin-bottom:8px;}
 .success-sub{font-size:15px;color:var(--muted);margin-bottom:6px;}
-.success-time{font-family:'DM Mono',monospace;font-size:13px;color:var(--muted);background:#F0F0EC;display:inline-block;padding:4px 12px;border-radius:6px;margin-bottom:28px;}
+.success-time{font-family:'DM Mono',monospace;font-size:13px;color:var(--muted);background:#F0F0EC;display:inline-block;padding:4px 12px;border-radius:6px;margin-bottom:20px;}
+.period-hours{font-size:15px;font-weight:600;color:var(--accent);background:var(--accent-light);border-radius:10px;padding:12px 16px;margin:0 auto 24px;max-width:320px;line-height:1.4;}
+.period-hours .ph-num{font-size:22px;font-weight:700;display:block;margin-top:2px;}
+.period-hours .ph-lbl{font-size:11px;font-weight:600;letter-spacing:0.6px;text-transform:uppercase;color:var(--muted);}
 .btn-back{background:var(--ink);color:#fff;border:none;border-radius:12px;padding:16px 32px;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:600;cursor:pointer;}
 
 /* LOADING */
@@ -188,6 +191,7 @@ tr.total-row td{background:var(--accent-light);font-weight:700;color:var(--accen
   <div class="success-title" id="successTitle"></div>
   <div class="success-sub" id="successSub"></div>
   <div class="success-time" id="successTime"></div>
+  <div class="period-hours" id="successHours"></div>
   <button class="btn-back" onclick="doneSuccess()">Done ✓</button>
   <div class="success-sub" id="successCountdown" style="margin-top:14px;"></div>
 </div>
@@ -341,7 +345,7 @@ tr.total-row td{background:var(--accent-light);font-weight:700;color:var(--accen
 
 <script>
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzHP_z39d1HLEv-y0KSwA1Ce8PPx8ptC3a0N7ODMMJ3Ju9lpuWyXOK1gxliFObZQnM6/exec';
-const APP_VERSION = '1.11.0';
+const APP_VERSION = '1.12.0';
 document.getElementById('versionDisplay').textContent = APP_VERSION;
 
 const K_EMPS='ejpm_employees', K_BREAKS='ejpm_breakrules', K_PASS='ejpm_admin_pass';
@@ -514,7 +518,7 @@ function clearAutoReturn(){
 }
 function startAutoReturn(){
   clearAutoReturn();
-  let secs=3;
+  let secs=5;
   const cd=document.getElementById('successCountdown');
   if(cd) cd.textContent='Returning in '+secs+'…';
   autoReturnInterval=setInterval(()=>{
@@ -524,7 +528,7 @@ function startAutoReturn(){
   autoReturnTimer=setTimeout(()=>{
     clearAutoReturn();
     showScreen('clockScreen');
-  },3000);
+  },5000);
 }
 function doneSuccess(){
   clearAutoReturn();
@@ -596,6 +600,19 @@ async function doClockAction(action){
     document.getElementById('successTime').textContent=
       now.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+' · '+
       now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    // Hours worked this (bi-weekly) pay period — from completed shifts, net of breaks.
+    try{
+      const pb=payPeriod(now,0);
+      const fromD=new Date(periodISO(pb.start)+'T00:00:00');
+      const toD=new Date(periodISO(pb.end)+'T23:59:59');
+      const mineP=after.filter(r=>{const t=new Date(r.timestamp);return r.name===name&&t>=fromD&&t<=toD;});
+      const totMs=buildSessions(mineP,getBreaks()).reduce((a,s)=>a+s.totalMs,0);
+      const fmtP=d=>(d.getUTCMonth()+1)+'/'+d.getUTCDate();
+      document.getElementById('successHours').innerHTML=
+        '<span class="ph-lbl">Hours this pay period ('+fmtP(pb.start)+'–'+fmtP(pb.end)+')</span>'+
+        '<span class="ph-num">'+fmtDur(totMs)+'</span>'+
+        (action==='IN'?'<span style="font-size:11px;color:var(--muted);font-weight:500;">current shift not counted until you clock out</span>':'');
+    }catch(ePeriod){ document.getElementById('successHours').innerHTML=''; }
     document.getElementById('empSelect').value='';
     showScreen('successScreen');
     startAutoReturn();
@@ -703,34 +720,34 @@ function toDatetimeLocalValue(d){
   return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes());
 }
 
+// ── PAY PERIODS (bi-weekly, 14 days, anchored to a known period start) ──
+// 2026-07-18 is a real period start; every prior/next period is a 14-day step from it.
+const PERIOD_ANCHOR_UTC=Date.UTC(2026,6,18);
+const DAY_MS=86400000;
+// Period containing `ref`, shifted by `offset` whole periods (0=current, -1=previous).
+function payPeriod(ref,offset){
+  const d=ref||new Date();
+  const dUTC=Date.UTC(d.getFullYear(),d.getMonth(),d.getDate());
+  const idx=Math.floor((dUTC-PERIOD_ANCHOR_UTC)/(14*DAY_MS))+(offset||0);
+  const startUTC=PERIOD_ANCHOR_UTC+idx*14*DAY_MS;
+  return {start:new Date(startUTC),end:new Date(startUTC+13*DAY_MS)};
+}
+function periodISO(d){return d.toISOString().slice(0,10);} // d is UTC-midnight -> YYYY-MM-DD
+
 // ── PAYROLL PERIOD PRESETS ──
 function setPeriodPreset(which){
-  const now=new Date();
-  let from,to;
-  if(which==='this'){
-    const day=now.getDate();
-    if(day<=15){from=new Date(now.getFullYear(),now.getMonth(),1);to=new Date(now.getFullYear(),now.getMonth(),15);}
-    else{from=new Date(now.getFullYear(),now.getMonth(),16);to=new Date(now.getFullYear(),now.getMonth()+1,0);}
-  }else if(which==='last'){
-    const day=now.getDate();
-    if(day<=15){
-      const prevLastDay=new Date(now.getFullYear(),now.getMonth(),0); // last day of previous month
-      from=new Date(prevLastDay.getFullYear(),prevLastDay.getMonth(),16);
-      to=prevLastDay;
-    }else{
-      from=new Date(now.getFullYear(),now.getMonth(),1);
-      to=new Date(now.getFullYear(),now.getMonth(),15);
-    }
-  }else if(which==='week'){
-    const dow=now.getDay(); // 0=Sun..6=Sat
-    const diffToMonday=(dow===0?-6:1-dow);
-    from=new Date(now.getFullYear(),now.getMonth(),now.getDate()+diffToMonday);
-    to=now;
+  let fromStr,toStr;
+  if(which==='this'){const b=payPeriod(new Date(),0);fromStr=periodISO(b.start);toStr=periodISO(b.end);}
+  else if(which==='last'){const b=payPeriod(new Date(),-1);fromStr=periodISO(b.start);toStr=periodISO(b.end);}
+  else if(which==='week'){
+    const now=new Date();const dow=now.getDay();const diffToMonday=(dow===0?-6:1-dow);
+    const from=new Date(now.getFullYear(),now.getMonth(),now.getDate()+diffToMonday);
+    const pad=n=>String(n).padStart(2,'0');
+    const fmt=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+    fromStr=fmt(from);toStr=fmt(now);
   }
-  const pad=n=>String(n).padStart(2,'0');
-  const fmt=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
-  document.getElementById('periodFrom').value=fmt(from);
-  document.getElementById('periodTo').value=fmt(to);
+  document.getElementById('periodFrom').value=fromStr;
+  document.getElementById('periodTo').value=toStr;
   renderPayroll();
 }
 
@@ -762,12 +779,9 @@ function buildSessions(entries,breakRules){
 async function renderPayroll(){
   const fromEl=document.getElementById('periodFrom'), toEl=document.getElementById('periodTo');
   if(!fromEl.value||!toEl.value){
-    const now=new Date(); const day=now.getDate();
-    let from,to;
-    if(day<=15){from=new Date(now.getFullYear(),now.getMonth(),1);to=new Date(now.getFullYear(),now.getMonth(),15);}
-    else{from=new Date(now.getFullYear(),now.getMonth(),16);to=new Date(now.getFullYear(),now.getMonth()+1,0);}
-    fromEl.value=from.toISOString().slice(0,10);
-    toEl.value=to.toISOString().slice(0,10);
+    const b=payPeriod(new Date(),0);
+    fromEl.value=periodISO(b.start);
+    toEl.value=periodISO(b.end);
   }
   const fromDate=new Date(fromEl.value+'T00:00:00');
   const toDate=new Date(toEl.value+'T23:59:59');
