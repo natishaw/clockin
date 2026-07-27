@@ -33,7 +33,7 @@ function doPost(e) {
     if (data.action_type === 'deleteRow') {
       const rows = sheet.getDataRange().getValues();
       for (let i = 1; i < rows.length; i++) {
-        if (String(rows[i][0]) === String(data.timestamp) &&
+        if (sameTs(rows[i][0], data.timestamp) &&
             rows[i][1] === data.name &&
             rows[i][2] === data.action) {
           sheet.deleteRow(i + 1);
@@ -47,7 +47,7 @@ function doPost(e) {
     if (data.action_type === 'editRow') {
       const rows = sheet.getDataRange().getValues();
       for (let i = 1; i < rows.length; i++) {
-        if (String(rows[i][0]) === String(data.old_timestamp) &&
+        if (sameTs(rows[i][0], data.old_timestamp) &&
             rows[i][1] === data.old_name &&
             rows[i][2] === data.old_action) {
           sheet.getRange(i + 1, 1).setValue(data.new_timestamp);
@@ -95,4 +95,14 @@ function ok(msg) {
   return ContentService
     .createTextOutput(JSON.stringify({ status: 'ok', msg }))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+// Match timestamps robustly. Google Sheets stores the timestamp as a real
+// date, so a stored cell (a Date) and the ISO string the app sends back never
+// match as raw strings. Compare them as the same instant instead, with an
+// exact-string fallback for cells Sheets kept as plain text.
+function sameTs(cell, incoming) {
+  if (String(cell) === String(incoming)) return true;
+  var a = new Date(cell).getTime(), b = new Date(incoming).getTime();
+  return !isNaN(a) && !isNaN(b) && a === b;
 }
