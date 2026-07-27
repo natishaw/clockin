@@ -46,6 +46,10 @@ select:focus,input:focus{outline:none;border-color:var(--accent);background-colo
 .btn:active{transform:scale(0.97);}
 .btn:hover{filter:brightness(0.96);}
 .btn .icon{display:block;font-size:26px;margin-bottom:4px;}
+.btn:disabled{opacity:0.38;cursor:not-allowed;filter:none;transform:none;}
+.clock-status{text-align:center;font-size:13px;font-weight:600;margin:14px 0 -6px;min-height:18px;letter-spacing:0.2px;}
+.clock-status.in{color:var(--in-color);}
+.clock-status.out{color:var(--muted);}
 
 /* SUCCESS */
 #successScreen{text-align:center;width:100%;max-width:480px;padding-bottom:70px;}
@@ -153,7 +157,8 @@ tr.total-row td{background:var(--accent-light);font-weight:700;color:var(--accen
   </div>
   <div class="card">
     <label for="empSelect">Who are you?</label>
-    <select id="empSelect"><option value="" disabled selected>Select your name…</option></select>
+    <select id="empSelect" onchange="onEmpChange()"><option value="" disabled selected>Select your name…</option></select>
+    <div class="clock-status" id="clockStatus"></div>
     <div class="divider"><span>action</span></div>
     <span style="display:block;font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-bottom:12px;">What are you doing?</span>
     <div class="btn-row">
@@ -213,14 +218,21 @@ tr.total-row td{background:var(--accent-light);font-weight:700;color:var(--accen
     </div>
   </div>
   <div class="tabs">
-    <button class="tab active" onclick="switchTab(event,'payroll')">Payroll</button>
+    <button class="tab active" onclick="switchTab(event,'onshift')">On Shift</button>
+    <button class="tab" onclick="switchTab(event,'payroll')">Payroll</button>
     <button class="tab" onclick="switchTab(event,'log')">Log</button>
     <button class="tab" onclick="switchTab(event,'employees')">Employees</button>
     <button class="tab" onclick="switchTab(event,'settings')">Settings</button>
   </div>
 
+  <!-- ON SHIFT -->
+  <div id="tab-onshift" class="tab-content active">
+    <p class="section-title">Currently Clocked In</p>
+    <div class="emp-list" id="onShiftList"></div>
+  </div>
+
   <!-- PAYROLL -->
-  <div id="tab-payroll" class="tab-content active">
+  <div id="tab-payroll" class="tab-content">
     <p class="section-title">Period</p>
     <div class="date-row">
       <div><label>From</label><input type="date" id="periodFrom" onchange="renderPayroll()"/></div>
@@ -285,7 +297,7 @@ tr.total-row td{background:var(--accent-light);font-weight:700;color:var(--accen
 
 <script>
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzHP_z39d1HLEv-y0KSwA1Ce8PPx8ptC3a0N7ODMMJ3Ju9lpuWyXOK1gxliFObZQnM6/exec';
-const APP_VERSION = '1.9.0';
+const APP_VERSION = '1.10.0';
 document.getElementById('versionDisplay').textContent = APP_VERSION;
 
 const K_EMPS='ejpm_employees', K_BREAKS='ejpm_breakrules', K_PASS='ejpm_admin_pass';
@@ -363,6 +375,47 @@ function updateClock(){
 }
 updateClock(); setInterval(updateClock,5000);
 
+// ── SHIFT STATE (derived from the log) ──
+// Latest action for an employee, or null if they have no records.
+function getLastAction(name, records){
+  const mine=records.filter(r=>r.name===name)
+    .sort((a,b)=>new Date(a.timestamp)-new Date(b.timestamp));
+  return mine.length ? mine[mine.length-1].action : null;
+}
+// Everyone whose most recent action is IN (i.e. currently on the clock).
+function buildCurrentlyIn(records){
+  const byEmp={};
+  records.forEach(e=>{ (byEmp[e.name]=byEmp[e.name]||[]).push(e); });
+  const out=[];
+  for(const name in byEmp){
+    const rows=byEmp[name].sort((a,b)=>new Date(a.timestamp)-new Date(b.timestamp));
+    const last=rows[rows.length-1];
+    if(last&&last.action==='IN') out.push({name,inTime:new Date(last.timestamp)});
+  }
+  return out.sort((a,b)=>a.inTime-b.inTime);
+}
+
+// Reflect the selected employee's current state on the clock screen.
+async function onEmpChange(){
+  const name=document.getElementById('empSelect').value;
+  const statusEl=document.getElementById('clockStatus');
+  const bi=document.getElementById('btnClockIn'), bo=document.getElementById('btnClockOut');
+  if(!name){ statusEl.textContent=''; statusEl.className='clock-status'; if(bi)bi.disabled=false; if(bo)bo.disabled=false; return; }
+  statusEl.textContent='Checking…'; statusEl.className='clock-status out';
+  const recs=await getSheetRecords();
+  // ignore if the user changed selection while we were fetching
+  if(document.getElementById('empSelect').value!==name) return;
+  const last=getLastAction(name,recs);
+  if(last==='IN'){
+    statusEl.textContent='✓ Currently clocked in'; statusEl.className='clock-status in';
+    if(bi)bi.disabled=true; if(bo)bo.disabled=false;
+  }else{
+    statusEl.textContent=last==='OUT'?'Clocked out — ready to clock in':'No records yet — ready to clock in';
+    statusEl.className='clock-status out';
+    if(bi)bi.disabled=false; if(bo)bo.disabled=true;
+  }
+}
+
 function populateSelect(){
   const emps=getEmps();
   // Clock screen
@@ -427,6 +480,22 @@ async function doClockAction(action){
   try{
     // Snapshot how many rows this employee already has (fresh read).
     const before=await getSheetRecords(true);
+    // Guard: block impossible transitions (double clock-in, or clock-out with no open shift).
+    const lastAction=getLastAction(name,before);
+    if(action==='IN'&&lastAction==='IN'){
+      clearTimeout(timeoutId);
+      showScreen('clockScreen');
+      alert(name+' is already clocked in. Tap Clock Out instead.');
+      onEmpChange();
+      return;
+    }
+    if(action==='OUT'&&lastAction!=='IN'){
+      clearTimeout(timeoutId);
+      showScreen('clockScreen');
+      alert(name+' is not currently clocked in. Tap Clock In first.');
+      onEmpChange();
+      return;
+    }
     const beforeCount=before.filter(r=>r.name===name).length;
     // Send the punch. no-cors guarantees the write isn't blocked by POST CORS;
     // awaiting it still waits for the server to finish appending the row.
@@ -487,7 +556,7 @@ function numDel(){if(pcInput.length>0){pcInput=pcInput.slice(0,-1);updateDots();
 function lockAdmin(){adminUnlocked=false;navTo('clock');}
 
 // Tabs
-let activeTab='payroll';
+let activeTab='onshift';
 function switchTab(e,name){
   activeTab=name;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
@@ -497,10 +566,46 @@ function switchTab(e,name){
   renderAdminTabs();
 }
 function renderAdminTabs(){
-  if(activeTab==='payroll') renderPayroll();
+  if(activeTab==='onshift') renderOnShift();
+  else if(activeTab==='payroll') renderPayroll();
   else if(activeTab==='log') renderLog();
   else if(activeTab==='employees') renderEmployees();
 }
+
+// ── ON SHIFT TAB ──
+async function renderOnShift(){
+  const c=document.getElementById('onShiftList');
+  c.innerHTML='<div class="loading-inline"><div class="spinner-sm"></div>Loading…</div>';
+  const recs=await getSheetRecords();
+  renderOnShiftList(recs);
+}
+function renderOnShiftList(recs){
+  const c=document.getElementById('onShiftList');
+  if(!c) return;
+  const list=buildCurrentlyIn(recs);
+  if(!list.length){
+    c.innerHTML='<div class="empty-state"><div class="empty-icon">🌙</div>No one is currently clocked in.</div>';
+    return;
+  }
+  const now=Date.now();
+  c.innerHTML=list.map(s=>{
+    const ms=now-s.inTime.getTime();
+    const long=ms>12*3600000; // likely a forgotten clock-out
+    const since=s.inTime.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+    const badge=long
+      ? '<span class="break-badge">'+fmtDur(ms)+' ⚠</span>'
+      : '<span class="badge badge-in">'+fmtDur(ms)+'</span>';
+    return '<div class="emp-item"><div><div class="emp-name">'+s.name+'</div>'+
+      '<div class="setting-sub">since '+since+(long?' · check clock-out':'')+'</div></div>'+
+      '<div class="emp-actions">'+badge+'</div></div>';
+  }).join('');
+}
+// Live-refresh the board while it's open (recomputes durations; refetch respects the 60s cache).
+setInterval(async ()=>{
+  if(adminUnlocked&&activeTab==='onshift'){
+    renderOnShiftList(await getSheetRecords());
+  }
+},30000);
 function enterAdmin(){
   showScreen('adminScreen');
   document.getElementById('nav-admin').classList.add('active');
