@@ -50,6 +50,9 @@ select:focus,input:focus{outline:none;border-color:var(--accent);background-colo
 .clock-status{text-align:center;font-size:13px;font-weight:600;margin:14px 0 -6px;min-height:18px;letter-spacing:0.2px;}
 .clock-status.in{color:var(--in-color);}
 .clock-status.out{color:var(--muted);}
+.joke-card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 20px;margin-top:16px;text-align:center;}
+.joke-label{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
+.joke-text{font-size:14px;font-weight:500;color:var(--ink);line-height:1.45;}
 
 /* SUCCESS */
 #successScreen{text-align:center;width:100%;max-width:480px;padding-bottom:70px;}
@@ -176,6 +179,10 @@ tr.total-row td{background:var(--accent-light);font-weight:700;color:var(--accen
       <button class="btn btn-in" id="btnClockIn" onclick="doClockAction('IN')"><span class="icon">👋</span>Clock In</button>
       <button class="btn btn-out" id="btnClockOut" onclick="doClockAction('OUT')"><span class="icon">🚪</span>Clock Out</button>
     </div>
+  </div>
+  <div class="joke-card" id="jokeCard">
+    <div class="joke-label" id="jokeLabel">😋 Joke of the day</div>
+    <div class="joke-text" id="jokeText"></div>
   </div>
 </div>
 
@@ -345,7 +352,7 @@ tr.total-row td{background:var(--accent-light);font-weight:700;color:var(--accen
 
 <script>
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzHP_z39d1HLEv-y0KSwA1Ce8PPx8ptC3a0N7ODMMJ3Ju9lpuWyXOK1gxliFObZQnM6/exec';
-const APP_VERSION = '1.12.0';
+const APP_VERSION = '1.13.0';
 document.getElementById('versionDisplay').textContent = APP_VERSION;
 
 const K_EMPS='ejpm_employees', K_BREAKS='ejpm_breakrules', K_PASS='ejpm_admin_pass';
@@ -423,7 +430,74 @@ function updateClock(){
   h=h%12; if(h===0)h=12;
   document.getElementById('clockTime').textContent=h+':'+String(n.getMinutes()).padStart(2,'0')+' '+ampm;
   document.getElementById('clockDate').textContent=n.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+  // Roll the joke over if a kiosk is left open past midnight.
+  if(jokeDayShown&&jokeDayShown!==n.toDateString()) renderJoke();
 }
+// ── JOKE OF THE DAY (rotates daily, keyed to the date; no upkeep needed) ──
+const JOKES=[
+"Why did the pad thai go to the gym? To get more noodle gains! 🍜",
+"I'm on a seafood diet. I see pad krapow and I eat it.",
+"What did the green curry say to the chef? \"You're really speeding up my thyme!\" 🌿",
+"Why did the som tam go to school? It wanted to get crushed in the competition!",
+"I tried to make a joke about fish sauce, but it was just too stinky!",
+"Why did the Thai chef break up with their calculator? They couldn't count on it!",
+"Why did the mango sticky rice break up with the diner? The relationship was too sticky! 🥭",
+"Did you hear about the basil that joined the orchestra? It became a leaf-d violinist!",
+"Why don't Thai chefs ever play hide and seek? Because good flavor is always found!",
+"What did the lemongrass say at the talent show? \"I'm going to leaf them speechless!\" 🌾",
+"Why did the satay go to the art museum? It wanted to see some works of craft-y!",
+"I told my kaffir lime it was amazing, and it really lifted my spirits!",
+"What do you call a bird's eye chili that tells jokes? A stand-up comedi-pepper! 🌶️",
+"Why did the tom kha refuse to fight? It was too creamy for conflict!",
+"How do Thai cooks stay in shape? They do stir-fry ups!",
+"What did the spring roll say to the wrapper? \"You're on a roll!\" 🌯",
+"Why did the galangal break up with its partner? Too much bad root between them!",
+"What do you call a lazy Tom Yum? A lukewarm Yum!",
+"Did you hear about the tamarind who became a detective? It cracked the case!",
+"Why did the sticky rice go to therapy? It had too many layers to work through!",
+"What did the coconut milk say to the curry? \"You've really brought out my best side!\"",
+"Why don't boat noodles ever get lost? They always follow the current! 🚤",
+"What's a Thai chef's favorite dance move? The stir-fry shuffle!",
+"Why did the pad see ew win first place? It had the darkest flavor!",
+"When Thai noodles get romantic, they really know how to tie the knot!",
+"How does a Thai chef organize their kitchen? With a very spice rack-et system!",
+"What did the Thai iced tea say about its future? \"Smooth sailing ahead!\" 🧋",
+"Why did the chili make a good teacher? It really knew how to turn up the heat!",
+"Why did the herb garden never get stressed? It was too zen-basil!",
+"What did the wok say to the flame? \"We're really heating up!\" 🔥",
+"Why did the massaman curry get hired as a manager? It knew how to handle everyone's differences!",
+"What do you call a Thai chef's memoir? \"Wok of Life!\"",
+"Why did the spring roll file a complaint? It felt totally wrapped up in drama!",
+"What did the mint leaf say to the basil? \"You're looking very fresh today!\"",
+"Why don't Thai kitchens ever feel lonely? There's always plenty of wok talk!",
+"What do you call a brave piece of ginger? Bold-root!",
+"Why did the sauce pan propose to the wok? They had great chemistry!",
+"Why did the Thai restaurant hire a musician? To really turn up the flavor volume!",
+"What do you call a competitive Thai dish? Pad Thai-ticular excellence!",
+"Why did the garlic clove start a podcast? It had a lot of flavor to share!",
+"What did the kitchen timer say? \"Thyme flies when you're cooking!\" ⏱️",
+"Why did the sesame seed become a financial advisor? It knew how to multiply!",
+"Why was the Thai chef great at meditation? They knew how to find inner pad-ce!",
+"Why did the dishwasher become a poet? It saw the beauty in every clean plate!",
+"What did the onion say to the cutting board? \"You drive me to tears!\" 🧅",
+"Why is cooking pad thai like writing a novel? You need the right plot twist!",
+"What do you call a Thai restaurant that's always smiling? Pad Thai and cheerful! 😊"
+];
+// Deterministic index for a given date — same joke all day, flips at local midnight.
+function jokeIndexForDate(d){
+  const dayNum=Math.floor(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())/86400000);
+  return ((dayNum%JOKES.length)+JOKES.length)%JOKES.length;
+}
+let jokeDayShown=null;
+function renderJoke(){
+  const now=new Date();
+  const idx=jokeIndexForDate(now);
+  jokeDayShown=now.toDateString();
+  const el=document.getElementById('jokeText');
+  if(el) el.textContent=JOKES[idx];
+}
+renderJoke();
+
 updateClock(); setInterval(updateClock,5000);
 
 // ── SHIFT STATE (derived from the log) ──
@@ -451,6 +525,8 @@ async function onEmpChange(){
   const name=document.getElementById('empSelect').value;
   const statusEl=document.getElementById('clockStatus');
   const bi=document.getElementById('btnClockIn'), bo=document.getElementById('btnClockOut');
+  const jokeLabel=document.getElementById('jokeLabel');
+  if(jokeLabel) jokeLabel.textContent=name?('😋 A joke for you, '+name):'😋 Joke of the day';
   if(!name){ statusEl.textContent=''; statusEl.className='clock-status'; if(bi)bi.disabled=false; if(bo)bo.disabled=false; return; }
   statusEl.textContent='Checking…'; statusEl.className='clock-status out';
   const recs=await getSheetRecords();
@@ -614,6 +690,7 @@ async function doClockAction(action){
         (action==='IN'?'<span style="font-size:11px;color:var(--muted);font-weight:500;">current shift not counted until you clock out</span>':'');
     }catch(ePeriod){ document.getElementById('successHours').innerHTML=''; }
     document.getElementById('empSelect').value='';
+    { const jl=document.getElementById('jokeLabel'); if(jl) jl.textContent='😋 Joke of the day'; }
     showScreen('successScreen');
     startAutoReturn();
   }catch(e){
