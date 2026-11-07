@@ -155,6 +155,13 @@ tr.total-row td{background:var(--accent-light);font-weight:700;color:var(--accen
 
 
 
+/* PAYROLL REVIEW */
+.review-box{background:#FFF8EC;border:1.5px solid #FFB74D;border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:13px;color:var(--ink);}
+.review-title{font-weight:700;color:#B45309;margin-bottom:6px;}
+.review-box ul{margin:0 0 6px 18px;line-height:1.5;}
+.review-hint{font-size:11px;color:var(--muted);}
+tr.long-row td{background:#FFF8EC;}
+
 /* SAVING OVERLAY */
 .saving-toast{display:none;position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;font-weight:600;z-index:300;white-space:nowrap;}
 .saving-toast.show{display:block;}
@@ -352,7 +359,7 @@ tr.total-row td{background:var(--accent-light);font-weight:700;color:var(--accen
 
 <script>
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzHP_z39d1HLEv-y0KSwA1Ce8PPx8ptC3a0N7ODMMJ3Ju9lpuWyXOK1gxliFObZQnM6/exec';
-const APP_VERSION = '1.14.0';
+const APP_VERSION = '1.15.0';
 document.getElementById('versionDisplay').textContent = APP_VERSION;
 
 const K_EMPS='ejpm_employees', K_BREAKS='ejpm_breakrules', K_PASS='ejpm_admin_pass';
@@ -389,21 +396,32 @@ async function saveConfig(){
 
 // Sheet cache
 let sheetCache=null, cacheTime=0;
-async function getSheetRecords(force){
+// strict=true: throw if the sheet can't be read (callers that must not act on
+// missing data, e.g. the clock-in guard). Otherwise fall back to the last cache.
+async function getSheetRecords(force,strict){
   if(!force&&sheetCache&&(Date.now()-cacheTime<60000)) return sheetCache;
   try{
     const res=await fetch(SCRIPT_URL+'?t='+Date.now());
+    if(!res.ok) throw new Error('http_'+res.status);
     const raw=await res.json();
-    sheetCache=raw.filter(r=>r.Timestamp&&r.Name&&r.Action).map(r=>({
-      row: r._row,           // actual sheet row number — used for edit/delete
-      name: r.Name,
-      action: r.Action,
-      timestamp: new Date(r.Timestamp).toISOString(),
-      raw_ts: String(r.Timestamp)
-    }));
+    if(!Array.isArray(raw)) throw new Error('bad_payload');
+    sheetCache=raw.filter(r=>r.Timestamp&&r.Name&&r.Action).map(r=>{
+      const d=new Date(r.Timestamp);
+      if(isNaN(d.getTime())) return null; // one hand-typed bad cell must not blank the whole app
+      return {
+        name: String(r.Name).trim(),
+        action: String(r.Action).trim().toUpperCase(),
+        timestamp: d.toISOString(),
+        // sent back verbatim so the backend's exact-match on edit/delete still finds the row
+        raw_ts: String(r.Timestamp), raw_name: r.Name, raw_action: r.Action
+      };
+    }).filter(Boolean);
     cacheTime=Date.now();
     return sheetCache;
-  }catch(e){return sheetCache||[];}
+  }catch(e){
+    if(strict) throw e;
+    return sheetCache||[];
+  }
 }
 
 // Post to sheet
@@ -628,13 +646,16 @@ async function doClockAction(action){
     return; // guard accidental identical re-submit within a few seconds
   }
   clockActionInFlight=true;
+  let failed=false;
   setClockButtonsDisabled(true);
   showScreen('loadingScreen');
   const controller=new AbortController();
   const timeoutId=setTimeout(()=>controller.abort(),15000);
+  let posted=false; // once the POST is sent, the row may have landed even if we can't confirm it
   try{
-    // Snapshot how many rows this employee already has (fresh read).
-    const before=await getSheetRecords(true);
+    // Snapshot how many rows this employee already has (fresh read). Strict: if the
+    // sheet can't be read, don't guess the employee's state from an empty list.
+    const before=await getSheetRecords(true,true);
     // Guard: block impossible transitions (double clock-in, or clock-out with no open shift).
     const lastAction=getLastAction(name,before);
     if(action==='IN'&&lastAction==='IN'){
@@ -652,6 +673,7 @@ async function doClockAction(action){
       return;
     }
     const beforeCount=before.filter(r=>r.name===name).length;
+    posted=true;
     // Send the punch. no-cors guarantees the write isn't blocked by POST CORS;
     // awaiting it still waits for the server to finish appending the row.
     await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},
@@ -659,7 +681,7 @@ async function doClockAction(action){
     // Confirm via the GET read path (known to work cross-origin): a new row must
     // have landed for this employee, and its latest action must match what we sent.
     sheetCache=null;
-    const after=await getSheetRecords(true);
+    const after=await getSheetRecords(true,true);
     clearTimeout(timeoutId);
     const mine=after.filter(r=>r.name===name)
       .sort((a,b)=>new Date(a.timestamp)-new Date(b.timestamp));
@@ -681,8 +703,7 @@ async function doClockAction(action){
       const pb=payPeriod(now,0);
       const fromD=new Date(periodISO(pb.start)+'T00:00:00');
       const toD=new Date(periodISO(pb.end)+'T23:59:59');
-      const mineP=after.filter(r=>{const t=new Date(r.timestamp);return r.name===name&&t>=fromD&&t<=toD;});
-      const totMs=buildSessions(mineP,getBreaks()).reduce((a,s)=>a+s.totalMs,0);
+      const totMs=periodSessions(mine,fromD,toD,getBreaks()).reduce((a,s)=>a+s.totalMs,0);
       const fmtP=d=>(d.getUTCMonth()+1)+'/'+d.getUTCDate();
       document.getElementById('successHours').innerHTML=
         '<span class="ph-lbl">Hours this pay period ('+fmtP(pb.start)+'–'+fmtP(pb.end)+')</span>'+
@@ -696,11 +717,17 @@ async function doClockAction(action){
   }catch(e){
     clearTimeout(timeoutId);
     showScreen('clockScreen');
-    alert('Could not save your clock '+(action==='IN'?'in':'out')+'. It was NOT recorded — please try again.');
+    const verb='clock '+(action==='IN'?'in':'out');
+    alert(posted
+      ? 'Could not confirm your '+verb+'. It MAY have saved. Check the status under your name before trying again.'
+      : 'Could not reach the server. Your '+verb+' was NOT recorded. Check the Wi-Fi and try again.');
+    failed=true;
   }finally{
     clockActionInFlight=false;
     setClockButtonsDisabled(false);
   }
+  // Re-derive the right button state (and show whether the punch landed) after a failure.
+  if(failed) onEmpChange();
 }
 
 // Passcode
@@ -765,7 +792,7 @@ function renderOnShiftList(recs){
     const badge=long
       ? '<span class="break-badge">'+fmtDur(ms)+' ⚠</span>'
       : '<span class="badge badge-in">'+fmtDur(ms)+'</span>';
-    return '<div class="emp-item"><div><div class="emp-name">'+s.name+'</div>'+
+    return '<div class="emp-item"><div><div class="emp-name">'+esc(s.name)+'</div>'+
       '<div class="setting-sub">since '+since+(long?' · check clock-out':'')+'</div></div>'+
       '<div class="emp-actions">'+badge+'</div></div>';
   }).join('');
@@ -785,6 +812,8 @@ function enterAdmin(){
 async function refreshData(){sheetCache=null;await fetchConfig();populateSelect();renderAdminTabs();}
 
 // Utils
+function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function csvCell(v){return '"'+String(v==null?'':v).replace(/"/g,'""')+'"';}
 function fmtDur(ms){if(ms<0)return'0h 0m';return Math.floor(ms/3600000)+'h '+Math.floor((ms%3600000)/60000)+'m';}
 function fmtTime(d){return d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}
 function fmtDate(d){return d.toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'numeric'});}
@@ -829,30 +858,64 @@ function setPeriodPreset(which){
 }
 
 // ── PAYROLL ──
+// Pair each OUT with the most recent open IN. An IN followed by another IN means
+// the first shift never got a clock-out: it is reported as an issue, NOT paired with
+// a later OUT (which used to produce multi-day "shifts"). A stray OUT with no open IN
+// is reported too. A trailing open IN is someone currently on shift, not an issue.
+const LONG_SHIFT_MS=14*3600000;
 function buildSessions(entries,breakRules){
   const byEmp={};
-  entries.forEach(e=>{if(!byEmp[e.name])byEmp[e.name]=[];byEmp[e.name].push(e);});
-  const sessions=[];
+  entries.forEach(e=>{(byEmp[e.name]=byEmp[e.name]||[]).push(e);});
+  const sessions=[], issues=[];
   for(const emp in byEmp){
-    const rows=byEmp[emp].sort((a,b)=>new Date(a.timestamp)-new Date(b.timestamp));
-    let i=0;
-    while(i<rows.length){
-      if(rows[i].action==='IN'){
-        const inTime=new Date(rows[i].timestamp);
-        let outTime=null;
-        for(let j=i+1;j<rows.length;j++){
-          if(rows[j].action==='OUT'){outTime=new Date(rows[j].timestamp);i=j+1;break;}
-        }
-        if(!outTime){i++;continue;}
+    const rows=byEmp[emp].slice().sort((a,b)=>new Date(a.timestamp)-new Date(b.timestamp));
+    let open=null;
+    rows.forEach(r=>{
+      if(r.action==='IN'){
+        if(open) issues.push({emp,type:'no_out',time:new Date(open.timestamp)});
+        open=r;
+      }else if(r.action==='OUT'){
+        if(!open){issues.push({emp,type:'no_in',time:new Date(r.timestamp)});return;}
+        const inTime=new Date(open.timestamp), outTime=new Date(r.timestamp);
         const durMs=outTime-inTime;
         const breakMs=(breakRules[emp]||0)*60000;
-        sessions.push({emp,date:inTime,inTime,outTime,durMs,totalMs:Math.max(0,durMs-breakMs)});
-      }else{i++;}
-    }
+        sessions.push({emp,date:inTime,inTime,outTime,durMs,totalMs:Math.max(0,durMs-breakMs),long:durMs>LONG_SHIFT_MS});
+        open=null;
+      }
+    });
   }
+  sessions.issues=issues;
   return sessions;
 }
+// Sessions whose clock-in falls inside [fromDate,toDate]. Pairing runs on the WHOLE log
+// first, so a shift that crosses midnight or a period boundary is never dropped.
+function periodSessions(allLog,fromDate,toDate,breakRules){
+  const all=buildSessions(allLog,breakRules);
+  const inRange=t=>t>=fromDate&&t<=toDate;
+  const out=all.filter(s=>inRange(s.inTime));
+  out.issues=all.issues.filter(x=>inRange(x.time));
+  return out;
+}
 
+// "Needs review" box: punches that break pairing, and suspiciously long shifts.
+// Fix them in the Log tab before running payroll.
+function buildReviewHtml(sessions){
+  const items=[];
+  (sessions.issues||[]).forEach(x=>{
+    const when=fmtDate(x.time)+' '+fmtTime(x.time);
+    items.push({t:x.time,html:'<strong>'+esc(x.emp)+'</strong> · '+(x.type==='no_out'
+      ?'clocked in '+when+' but never clocked out (not paid)'
+      :'clock-out '+when+' has no matching clock-in (ignored)')});
+  });
+  sessions.filter(s=>s.long).forEach(s=>{
+    items.push({t:s.inTime,html:'<strong>'+esc(s.emp)+'</strong> · '+fmtDur(s.durMs)+' shift from '+fmtDate(s.inTime)+' '+fmtTime(s.inTime)+' (probably a missed clock-out, counted in totals)'});
+  });
+  if(!items.length) return '';
+  items.sort((a,b)=>a.t-b.t);
+  return '<div class="review-box"><div class="review-title">⚠ '+items.length+' punch'+(items.length>1?'es':'')+' to check before payroll</div><ul>'+
+    items.map(i=>'<li>'+i.html+'</li>').join('')+'</ul><div class="review-hint">Fix these in the Log tab (add the missing punch or edit the time).</div></div>';
+}
+let payrollRenderToken=0;
 async function renderPayroll(){
   const fromEl=document.getElementById('periodFrom'), toEl=document.getElementById('periodTo');
   if(!fromEl.value||!toEl.value){
@@ -864,18 +927,20 @@ async function renderPayroll(){
   const toDate=new Date(toEl.value+'T23:59:59');
   document.getElementById('payrollTable').innerHTML='<div class="loading-inline"><div class="spinner-sm"></div>Loading from Google Sheets\u2026</div>';
   ['statHours','statEmps','statDays'].forEach(id=>document.getElementById(id).textContent='--');
+  const token=++payrollRenderToken;
   const allLog=await getSheetRecords();
+  if(token!==payrollRenderToken) return; // a newer render (date change) superseded this one
   const breaks=getBreaks();
-  const filtered=allLog.filter(e=>{const d=new Date(e.timestamp);return d>=fromDate&&d<=toDate;});
-  const sessions=buildSessions(filtered,breaks);
+  const sessions=periodSessions(allLog,fromDate,toDate,breaks);
   const empSet=[...new Set(sessions.map(s=>s.emp))].sort();
   const totalMs=sessions.reduce((a,s)=>a+s.totalMs,0);
   document.getElementById('statHours').textContent=(totalMs/3600000).toFixed(1)+'h';
   document.getElementById('statEmps').textContent=empSet.length;
   document.getElementById('statDays').textContent=new Set(sessions.map(s=>fmtDate(s.date))).size;
   const container=document.getElementById('payrollTable');
-  if(sessions.length===0){container.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div>No records in this period.</div>';return;}
-  let html='<div class="tbl-wrap"><table><thead><tr><th>Employee</th><th>Days</th><th>Raw</th><th>Total</th></tr></thead><tbody>';
+  const reviewHtml=buildReviewHtml(sessions);
+  if(sessions.length===0){container.innerHTML=reviewHtml+'<div class="empty-state"><div class="empty-icon">📋</div>No records in this period.</div>';return;}
+  let html=reviewHtml+'<div class="tbl-wrap"><table><thead><tr><th>Employee</th><th>Days</th><th>Raw</th><th>Total</th></tr></thead><tbody>';
   let gd=0,gt=0;
   empSet.forEach(emp=>{
     const es=sessions.filter(s=>s.emp===emp);
@@ -884,15 +949,17 @@ async function renderPayroll(){
     const etot=es.reduce((a,s)=>a+s.totalMs,0);
     gd+=edur;gt+=etot;
     const note=breaks[emp]?' <span style="font-size:11px;color:var(--muted);">(-'+breaks[emp]+'m/shift)</span>':'';
-    html+='<tr><td><strong>'+emp+'</strong>'+note+'</td><td>'+ed+'</td><td>'+fmtDur(edur)+'</td><td>'+fmtDur(etot)+'</td></tr>';
+    html+='<tr><td><strong>'+esc(emp)+'</strong>'+note+'</td><td>'+ed+'</td><td>'+fmtDur(edur)+'</td><td>'+fmtDur(etot)+'</td></tr>';
   });
   html+='<tr class="total-row"><td>TOTAL</td><td>—</td><td>'+fmtDur(gd)+'</td><td>'+fmtDur(gt)+'</td></tr></tbody></table></div>';
   empSet.forEach(emp=>{
     const es=sessions.filter(s=>s.emp===emp).sort((a,b)=>a.date-b.date);
-    html+='<p class="section-title" style="margin-top:18px;">'+emp+'</p>';
+    html+='<p class="section-title" style="margin-top:18px;">'+esc(emp)+'</p>';
     html+='<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>In</th><th>Out</th><th>Raw</th><th>Total</th></tr></thead><tbody>';
     let tot=0;
-    es.forEach(s=>{tot+=s.totalMs;html+='<tr><td>'+fmtDate(s.date)+'</td><td>'+fmtTime(s.inTime)+'</td><td>'+fmtTime(s.outTime)+'</td><td>'+fmtDur(s.durMs)+'</td><td>'+fmtDur(s.totalMs)+'</td></tr>';});
+    es.forEach(s=>{tot+=s.totalMs;
+      const outCell=fmtTime(s.outTime)+(s.outTime.toDateString()!==s.inTime.toDateString()?' <span style="font-size:10px;color:var(--muted);">('+fmtDate(s.outTime)+')</span>':'');
+      html+='<tr'+(s.long?' class="long-row"':'')+'><td>'+fmtDate(s.date)+(s.long?' ⚠':'')+'</td><td>'+fmtTime(s.inTime)+'</td><td>'+outCell+'</td><td>'+fmtDur(s.durMs)+'</td><td>'+fmtDur(s.totalMs)+'</td></tr>';});
     html+='<tr class="total-row"><td colspan="4">Total</td><td>'+fmtDur(tot)+'</td></tr></tbody></table></div>';
   });
   container.innerHTML=html;
@@ -916,8 +983,8 @@ async function renderLog(){
     const dt=d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'})+' '+fmtTime(d);
     html+=`<tr>
       <td style="color:var(--muted);font-size:12px;">${logRecords.length-i}</td>
-      <td><strong>${e.name}</strong></td>
-      <td><span class="badge badge-${e.action.toLowerCase()}">${e.action}</span></td>
+      <td><strong>${esc(e.name)}</strong></td>
+      <td><span class="badge badge-${e.action==='IN'?'in':'out'}">${esc(e.action)}</span></td>
       <td style="font-family:'DM Mono',monospace;font-size:11px;">${dt}</td>
       <td><div class="log-actions">
         <button class="btn-secondary" onclick="openEditModal(${i})">Edit</button>
@@ -947,7 +1014,11 @@ function openEditModal(i){
   if(!r) return;
   editingLogIndex=i;
   populateSelect();
-  document.getElementById('editName').value=r.name;
+  const en=document.getElementById('editName');
+  if(![...en.options].some(o=>o.value===r.name)){
+    const o=document.createElement('option'); o.value=o.textContent=r.name; en.appendChild(o);
+  }
+  en.value=r.name;
   document.getElementById('editAction').value=r.action;
   document.getElementById('editDatetime').value=toDatetimeLocalValue(new Date(r.timestamp));
   document.getElementById('editModalOverlay').classList.add('show');
@@ -965,7 +1036,7 @@ async function saveEditRecord(){
   if(!name||!dtVal){alert('Fill in all fields.');return;}
   const payload={
     action_type:'editRow',
-    old_timestamp:r.raw_ts, old_name:r.name, old_action:r.action,
+    old_timestamp:r.raw_ts, old_name:r.raw_name, old_action:r.raw_action,
     new_timestamp:fromDatetimeLocal(dtVal), new_name:name, new_action:action
   };
   closeEditModal();
@@ -977,7 +1048,7 @@ async function deleteLogRecord(i){
   const r=logRecords[i];
   if(!r) return;
   if(!confirm('Delete this '+r.action+' punch for '+r.name+'?')) return;
-  await sheetPost({action_type:'deleteRow', timestamp:r.raw_ts, name:r.name, action:r.action});
+  await sheetPost({action_type:'deleteRow', timestamp:r.raw_ts, name:r.raw_name, action:r.raw_action});
   sheetCache=null;
   renderLog();
 }
@@ -988,21 +1059,21 @@ function renderEmployees(){
   const emps=getEmps(),breaks=getBreaks();
   const c=document.getElementById('empList');
   if(!emps.length){c.innerHTML='<div class="empty-state">No employees yet.</div>';return;}
-  c.innerHTML=emps.map(emp=>{
+  c.innerHTML=emps.map((emp,i)=>{
     const bMin=breaks[emp]||0;
     const bHtml=bMin>0?'<span class="break-badge">-'+bMin+'m/shift</span>':'<span style="font-size:12px;color:var(--muted);">No deduction</span>';
-    return'<div class="emp-item"><div class="emp-name">'+emp+'</div><div class="emp-actions">'+bHtml+
-      '<button onclick="toggleBreak(\''+emp+'\')" class="btn-secondary" style="padding:6px 10px;font-size:12px;">'+(bMin>0?'Remove break':'Add -60m')+'</button>'+
-      '<button onclick="removeEmployee(\''+emp+'\')" class="btn-danger" style="padding:6px 10px;font-size:12px;">✕</button></div></div>';
+    return'<div class="emp-item"><div class="emp-name">'+esc(emp)+'</div><div class="emp-actions">'+bHtml+
+      '<button onclick="toggleBreak(getEmps()['+i+'])" class="btn-secondary" style="padding:6px 10px;font-size:12px;">'+(bMin>0?'Remove break':'Add -60m')+'</button>'+
+      '<button onclick="removeEmployee(getEmps()['+i+'])" class="btn-danger" style="padding:6px 10px;font-size:12px;">✕</button></div></div>';
   }).join('');
 }
-function toggleBreak(emp){const b=getBreaks();if(b[emp])delete b[emp];else b[emp]=60;saveBreaks(b);renderEmployees();saveConfig();}
+function toggleBreak(emp){if(!emp)return;const b=getBreaks();if(b[emp])delete b[emp];else b[emp]=60;saveBreaks(b);renderEmployees();saveConfig();}
 function addEmployee(){
   const name=document.getElementById('newEmpName').value.trim();
   const bMin=parseInt(document.getElementById('newEmpBreak').value)||0;
   if(!name){alert('Enter a name.');return;}
   const emps=getEmps();
-  if(emps.includes(name)){alert('Already exists.');return;}
+  if(emps.some(e=>e.toLowerCase()===name.toLowerCase())){alert('Already exists.');return;}
   emps.push(name);saveEmps(emps);
   if(bMin>0){const b=getBreaks();b[name]=bMin;saveBreaks(b);}
   document.getElementById('newEmpName').value='';
@@ -1010,6 +1081,7 @@ function addEmployee(){
   renderEmployees();populateSelect();saveConfig();
 }
 function removeEmployee(emp){
+  if(!emp)return;
   if(!confirm('Remove '+emp+'?'))return;
   saveEmps(getEmps().filter(e=>e!==emp));
   const b=getBreaks();if(b[emp]){delete b[emp];saveBreaks(b);}
@@ -1022,17 +1094,17 @@ async function exportCSV(){
   if(!fv||!tv){alert('Set a period first.');return;}
   const allLog=await getSheetRecords();
   const breaks=getBreaks();
-  const filtered=allLog.filter(e=>{const d=new Date(e.timestamp);return d>=new Date(fv+'T00:00:00')&&d<=new Date(tv+'T23:59:59');});
-  const sessions=buildSessions(filtered,breaks).sort((a,b)=>a.emp.localeCompare(b.emp)||a.date-b.date);
-  let csv='Employee,Date,Clock In,Clock Out,Raw Hours,Total Hours\n';
-  sessions.forEach(s=>{ csv+='"'+s.emp+'","'+fmtDate(s.date)+'","'+fmtTime(s.inTime)+'","'+fmtTime(s.outTime)+'",'+
-    (s.durMs/3600000).toFixed(2)+','+(s.totalMs/3600000).toFixed(2)+'\n'; });
+  const sessions=periodSessions(allLog,new Date(fv+'T00:00:00'),new Date(tv+'T23:59:59'),breaks)
+    .sort((a,b)=>a.emp.localeCompare(b.emp)||a.date-b.date);
+  let csv='Employee,Date,Clock In,Clock Out,Raw Hours,Total Hours,Check\n';
+  sessions.forEach(s=>{ csv+=[csvCell(s.emp),csvCell(fmtDate(s.date)),csvCell(fmtTime(s.inTime)),csvCell(fmtDate(s.outTime)+' '+fmtTime(s.outTime)),
+    (s.durMs/3600000).toFixed(2),(s.totalMs/3600000).toFixed(2),csvCell(s.long?'LONG SHIFT - check clock-out':'')].join(',')+'\n'; });
   dlCSV(csv,'ejpm_payroll_'+fv+'_'+tv+'.csv');
 }
 async function exportFullCSV(){
   const log=await getSheetRecords();
   let csv='Timestamp,Name,Action\n';
-  log.forEach(e=>{csv+='"'+new Date(e.timestamp).toLocaleString('en-US')+'","'+e.name+'","'+e.action+'"\n';});
+  log.forEach(e=>{csv+=[csvCell(new Date(e.timestamp).toLocaleString('en-US')),csvCell(e.name),csvCell(e.action)].join(',')+'\n';});
   dlCSV(csv,'ejpm_clocklog_full.csv');
 }
 function dlCSV(csv,name){
