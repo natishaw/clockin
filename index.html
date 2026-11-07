@@ -92,8 +92,8 @@ select:focus,input:focus{outline:none;border-color:var(--accent);background-colo
 .admin-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;}
 .admin-header h1{font-size:20px;font-weight:700;color:var(--ink);}
 .lock-btn{background:#F0F0EC;border:none;border-radius:8px;padding:6px 12px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;}
-.tabs{display:flex;border-bottom:2px solid #EEEEE8;margin-bottom:20px;}
-.tab{padding:10px 16px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;margin-bottom:-2px;transition:color 0.15s,border-color 0.15s;}
+.tabs{display:flex;border-bottom:2px solid #EEEEE8;margin-bottom:20px;overflow-x:auto;scrollbar-width:none;}
+.tab{padding:10px 8px;white-space:nowrap;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;margin-bottom:-2px;transition:color 0.15s,border-color 0.15s;}
 .tab.active{color:var(--accent);border-bottom-color:var(--accent);}
 .tab-content{display:none;}
 .tab-content.active{display:block;}
@@ -147,7 +147,8 @@ tr.total-row td{background:var(--accent-light);font-weight:700;color:var(--accen
 .modal-card{background:var(--card);border-radius:var(--radius);padding:24px;max-width:380px;width:100%;box-shadow:var(--shadow);}
 .modal-card h3{font-size:16px;font-weight:700;color:var(--ink);margin-bottom:16px;}
 .modal-card label{margin-top:12px;}
-.modal-card label:first-of-type{margin-top:0;}
+.modal-card > label:first-of-type{margin-top:0;}
+.modal-card > div > label{margin-top:12px;}
 .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;}
 .preset-row{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
 .preset-btn{background:#F0F0EC;border:none;border-radius:8px;padding:8px 12px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;color:var(--ink);cursor:pointer;}
@@ -161,6 +162,23 @@ tr.total-row td{background:var(--accent-light);font-weight:700;color:var(--accen
 .review-box ul{margin:0 0 6px 18px;line-height:1.5;}
 .review-hint{font-size:11px;color:var(--muted);}
 tr.long-row td{background:#FFF8EC;}
+
+/* CORRECTION REQUESTS */
+.fix-link{display:block;margin:16px auto 0;background:none;border:none;color:var(--accent);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;text-decoration:underline;}
+.fix-link:disabled{color:#C8C8C0;cursor:not-allowed;text-decoration:none;}
+.modal-card textarea{width:100%;padding:10px 12px;border:1.5px solid #E8E8E4;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:14px;background:#FAFAF8;resize:vertical;min-height:60px;}
+.modal-card{max-height:92vh;overflow-y:auto;}
+.fix-msg{font-size:13px;margin-top:10px;min-height:18px;}
+.my-req{font-size:12px;border-top:1px solid #F0F0EC;padding:8px 0;color:var(--ink);}
+.req-status{display:inline-block;padding:1px 7px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:0.4px;}
+.req-PENDING{background:#FFF3E0;color:#B45309;}
+.req-APPROVED{background:var(--in-bg);color:var(--in-color);}
+.req-REJECTED{background:var(--out-bg);color:var(--out-color);}
+.req-card{background:var(--card);border:1.5px solid #E8E8E4;border-radius:10px;padding:12px 14px;margin-bottom:10px;font-size:13px;}
+.req-card.pending{border-color:#FFB74D;}
+.req-change{margin:6px 0;font-family:'DM Mono',monospace;font-size:12px;}
+.req-reason{color:var(--muted);font-style:italic;margin-bottom:8px;}
+.tab-badge{display:inline-block;background:var(--danger);color:#fff;border-radius:10px;font-size:10px;padding:0 6px;margin-left:4px;line-height:16px;}
 
 /* SAVING OVERLAY */
 .saving-toast{display:none;position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;font-weight:600;z-index:300;white-space:nowrap;}
@@ -186,6 +204,7 @@ tr.long-row td{background:#FFF8EC;}
       <button class="btn btn-in" id="btnClockIn" onclick="doClockAction('IN')"><span class="icon">👋</span>Clock In</button>
       <button class="btn btn-out" id="btnClockOut" onclick="doClockAction('OUT')"><span class="icon">🚪</span>Clock Out</button>
     </div>
+    <button class="fix-link" id="fixLink" onclick="openFixModal()" disabled>Wrong time? Request a fix</button>
   </div>
   <div class="joke-card" id="jokeCard">
     <div class="joke-label" id="jokeLabel">😋 Joke of the day</div>
@@ -247,8 +266,9 @@ tr.long-row td{background:#FFF8EC;}
   <div class="tabs">
     <button class="tab active" onclick="switchTab(event,'onshift')">On Shift</button>
     <button class="tab" onclick="switchTab(event,'payroll')">Payroll</button>
+    <button class="tab" onclick="switchTab(event,'requests')">Requests<span id="reqBadge"></span></button>
     <button class="tab" onclick="switchTab(event,'log')">Log</button>
-    <button class="tab" onclick="switchTab(event,'employees')">Employees</button>
+    <button class="tab" onclick="switchTab(event,'employees')">Staff</button>
     <button class="tab" onclick="switchTab(event,'settings')">Settings</button>
   </div>
 
@@ -277,6 +297,14 @@ tr.long-row td{background:#FFF8EC;}
     </div>
     <div id="payrollTable"></div>
     <div class="btn-row-right"><button class="btn-secondary" onclick="exportCSV()">⬇ Export CSV</button></div>
+  </div>
+
+  <!-- REQUESTS -->
+  <div id="tab-requests" class="tab-content">
+    <p class="section-title">Waiting for you</p>
+    <div id="reqPending"></div>
+    <p class="section-title" style="margin-top:24px;">Recently decided</p>
+    <div id="reqDone"></div>
   </div>
 
   <!-- LOG -->
@@ -356,6 +384,33 @@ tr.long-row td{background:#FFF8EC;}
   </div>
 </div>
 
+<!-- REQUEST A FIX MODAL (kiosk) -->
+<div class="modal-overlay" id="fixModalOverlay">
+  <div class="modal-card">
+    <h3>Request a fix · <span id="fixWho"></span></h3>
+    <p style="font-size:12px;color:var(--muted);margin:-8px 0 14px;">Your manager approves every change. Nothing changes until then.</p>
+    <label for="fixType">What's wrong?</label>
+    <select id="fixType" onchange="onFixTypeChange()">
+      <option value="edit">A punch has the wrong time</option>
+      <option value="add">I forgot to clock in or out</option>
+      <option value="delete">I punched by mistake</option>
+    </select>
+    <div id="fixPunchWrap"><label for="fixPunch">Which punch?</label><select id="fixPunch"></select></div>
+    <div id="fixActionWrap"><label for="fixAction">Missed</label>
+      <select id="fixAction"><option value="OUT">Clock Out</option><option value="IN">Clock In</option></select></div>
+    <div id="fixTimeWrap"><label for="fixTime" id="fixTimeLabel">Correct time</label><input type="datetime-local" id="fixTime"/></div>
+    <label for="fixReason">Reason</label>
+    <textarea id="fixReason" maxlength="300" placeholder="e.g. Tablet was busy, I started at 9:00"></textarea>
+    <div class="fix-msg" id="fixMsg"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeFixModal()">Close</button>
+      <button class="btn-primary" id="fixSubmit" onclick="submitFix()">Send request</button>
+    </div>
+    <p class="section-title" style="margin-top:18px;">Your requests</p>
+    <div id="myRequests"><div style="font-size:12px;color:var(--muted);">Loading…</div></div>
+  </div>
+</div>
+
 <!-- SAVING TOAST -->
 <div class="saving-toast" id="savingToast">Saving…</div>
 
@@ -371,7 +426,7 @@ tr.long-row td{background:#FFF8EC;}
 
 <script>
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzHP_z39d1HLEv-y0KSwA1Ce8PPx8ptC3a0N7ODMMJ3Ju9lpuWyXOK1gxliFObZQnM6/exec';
-const APP_VERSION = '1.16.0';
+const APP_VERSION = '1.17.0';
 document.getElementById('versionDisplay').textContent = APP_VERSION;
 
 const K_EMPS='ejpm_employees', K_BREAKS='ejpm_breakrules', K_TOKEN='ejpm_admin_token';
@@ -404,14 +459,16 @@ async function adminPost(payload){
 }
 // Admin write with a toast. Returns true if the server confirmed it.
 const ERR_TEXT={not_found:'That punch was not found. Refresh and try again.',bad_row:'Check the name and date/time.',
-  bad_action:'Pick IN or OUT.',busy:'Server busy. Try again.',exists:'That name already exists.',bad_pass:'Must be exactly 4 digits.'};
+  bad_action:'Pick IN or OUT.',busy:'Server busy. Try again.',exists:'That name already exists.',bad_pass:'Must be exactly 4 digits.',
+  punch_changed:'That punch was edited or deleted since the request. Reject it, or fix it in the Log tab.',
+  already_decided:'Already decided.'};
 async function adminWrite(payload){
   showToast('Saving…');
   try{
     const j=await adminPost(payload);
     sheetCache=null;
     if(j.status==='ok'){showToast('Saved ✓',1500);return j;}
-    showToast('Not saved: '+(ERR_TEXT[j.msg]||j.msg),3500);return null;
+    showToast('Not saved: '+(ERR_TEXT[j.msg]||j.msg),5000);return null;
   }catch(e){
     if(e.message!=='unauthorized') showToast('Error — check connection',2500);
     return null;
@@ -590,6 +647,7 @@ async function onEmpChange(){
   const bi=document.getElementById('btnClockIn'), bo=document.getElementById('btnClockOut');
   const jokeLabel=document.getElementById('jokeLabel');
   if(jokeLabel) jokeLabel.textContent=name?('😋 A joke for you, '+name):'😋 Joke of the day';
+  const fl=document.getElementById('fixLink'); if(fl) fl.disabled=!name;
   if(!name){ statusEl.textContent=''; statusEl.className='clock-status'; if(bi)bi.disabled=false; if(bo)bo.disabled=false; return; }
   statusEl.textContent='Checking…'; statusEl.className='clock-status out';
   let recs;
@@ -752,6 +810,7 @@ async function doClockAction(action){
   document.getElementById('empSelect').value='';
   { const jl=document.getElementById('jokeLabel'); if(jl) jl.textContent='😋 Joke of the day'; }
   { const st=document.getElementById('clockStatus'); st.textContent=''; st.className='clock-status'; }
+  { const fl=document.getElementById('fixLink'); if(fl) fl.disabled=true; }
   showScreen('successScreen');
   startAutoReturn();
 }
@@ -792,7 +851,7 @@ function switchTab(e,name){
   activeTab=name;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
-  e.target.classList.add('active');
+  e.currentTarget.classList.add('active');
   document.getElementById('tab-'+name).classList.add('active');
   renderAdminTabs();
 }
@@ -800,6 +859,7 @@ function renderAdminTabs(){
   if(activeTab==='onshift') renderOnShift();
   else if(activeTab==='payroll') renderPayroll();
   else if(activeTab==='log') renderLog();
+  else if(activeTab==='requests') renderRequests();
   else if(activeTab==='employees') renderEmployees();
 }
 
@@ -842,6 +902,7 @@ function enterAdmin(){
   document.getElementById('nav-admin').classList.add('active');
   document.getElementById('nav-clock').classList.remove('active');
   fetchConfig().then(()=>{populateSelect();renderAdminTabs();});
+  if(activeTab!=='requests') loadRequests().catch(()=>{}); // badge count
 }
 async function refreshData(){sheetCache=null;await fetchConfig();populateSelect();renderAdminTabs();}
 
@@ -1181,6 +1242,150 @@ async function changePass(){
   msg.style.color='var(--in-color)';
   msg.textContent='✓ Passcode updated on all devices';
   setTimeout(()=>msg.textContent='',2500);
+}
+
+// ── CORRECTION REQUESTS: kiosk side ──
+const FIX_ERR={unknown_employee:'Your name is not on the staff list.',no_reason:'Please add a reason.',
+  punch_not_found:'That punch changed. Close and try again.',bad_time:'Pick the correct date and time.',
+  future_time:'That time is in the future.',too_old:'That is too long ago. Ask your manager.',
+  too_many_pending:'You already have 5 requests waiting. Ask your manager.',bad_action:'Pick Clock In or Clock Out.',busy:'Server busy. Try again.'};
+const REQ_TYPE={edit:'Change time',add:'Add missed punch',delete:'Remove punch'};
+let fixName='', fixPunches=[], fixCloseTimer=null;
+function fmtShort(d){return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+' '+d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});}
+function tsOrDash(v){const d=new Date(v);return v&&!isNaN(d)?fmtShort(d):'—';}
+async function openFixModal(){
+  fixName=document.getElementById('empSelect').value;
+  if(!fixName) return;
+  document.getElementById('fixWho').textContent=fixName;
+  document.getElementById('fixType').value='edit';
+  document.getElementById('fixReason').value='';
+  document.getElementById('fixTime').value='';
+  document.getElementById('fixMsg').textContent='';
+  document.getElementById('fixSubmit').disabled=false;
+  const ps=document.getElementById('fixPunch');
+  ps.innerHTML='<option value="">Loading…</option>';
+  onFixTypeChange();
+  document.getElementById('fixModalOverlay').classList.add('show');
+  clearTimeout(fixCloseTimer); fixCloseTimer=setTimeout(closeFixModal,5*60000); // don't leave it open on the kiosk
+  try{
+    // Last 14 days of this employee's punches, newest first.
+    const cutoff=Date.now()-14*86400000;
+    fixPunches=(await fetchMine(fixName)).filter(r=>new Date(r.timestamp).getTime()>=cutoff)
+      .sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp));
+    ps.innerHTML=fixPunches.length
+      ? fixPunches.map((r,i)=>'<option value="'+i+'">'+(r.action==='IN'?'Clock In':'Clock Out')+' · '+esc(fmtShort(new Date(r.timestamp)))+'</option>').join('')
+      : '<option value="">No punches in the last 14 days</option>';
+    onFixTypeChange();
+  }catch(e){ ps.innerHTML='<option value="">Can\'t load punches</option>'; }
+  renderMyRequests();
+}
+function closeFixModal(){
+  clearTimeout(fixCloseTimer);
+  document.getElementById('fixModalOverlay').classList.remove('show');
+}
+function onFixTypeChange(){
+  const t=document.getElementById('fixType').value;
+  document.getElementById('fixPunchWrap').style.display=t==='add'?'none':'';
+  document.getElementById('fixActionWrap').style.display=t==='add'?'':'none';
+  document.getElementById('fixTimeWrap').style.display=t==='delete'?'none':'';
+  document.getElementById('fixTimeLabel').textContent=t==='add'?'When?':'Correct time';
+  // Pre-fill the time with the chosen punch, so a small fix is a small edit.
+  if(t==='edit'){
+    const r=fixPunches[document.getElementById('fixPunch').value];
+    if(r) document.getElementById('fixTime').value=toDatetimeLocalValue(new Date(r.timestamp));
+  }
+}
+document.getElementById('fixPunch').addEventListener('change',onFixTypeChange);
+async function submitFix(){
+  const t=document.getElementById('fixType').value, msg=document.getElementById('fixMsg');
+  const reason=document.getElementById('fixReason').value.trim();
+  const payload={action_type:'requestFix',name:fixName,type:t,reason};
+  if(t!=='add'){
+    const r=fixPunches[document.getElementById('fixPunch').value];
+    if(!r){msg.style.color='var(--danger)';msg.textContent='Pick a punch.';return;}
+    payload.punch_ts=r.raw_ts; payload.punch_action=r.raw_action;
+  }
+  if(t!=='delete'){
+    const v=document.getElementById('fixTime').value;
+    if(!v){msg.style.color='var(--danger)';msg.textContent='Pick the correct date and time.';return;}
+    payload.new_ts=fromDatetimeLocal(v);
+    if(t==='add') payload.new_action=document.getElementById('fixAction').value;
+  }
+  if(!reason){msg.style.color='var(--danger)';msg.textContent='Please add a reason.';return;}
+  const btn=document.getElementById('fixSubmit'); btn.disabled=true;
+  msg.style.color='var(--muted)'; msg.textContent='Sending…';
+  let j=null; try{ j=await apiPost(payload); }catch(e){}
+  btn.disabled=false;
+  if(j&&j.status==='ok'){
+    msg.style.color='var(--in-color)'; msg.textContent='✓ Sent. Your manager will review it.';
+    document.getElementById('fixReason').value='';
+    renderMyRequests();
+  }else{
+    msg.style.color='var(--danger)';
+    msg.textContent=j?(FIX_ERR[j.msg]||('Not sent: '+j.msg)):'Can\'t reach the server. Check the Wi-Fi.';
+  }
+}
+function reqChangeText(r){
+  const act=a=>a==='IN'?'Clock In':a==='OUT'?'Clock Out':'';
+  if(r.Type==='add') return 'Add '+act(r['New Action'])+' at '+tsOrDash(r['New Time']);
+  if(r.Type==='delete') return 'Remove '+act(r['Punch Action'])+' at '+tsOrDash(r['Punch Time']);
+  return act(r['Punch Action'])+': '+tsOrDash(r['Punch Time'])+' → '+tsOrDash(r['New Time']);
+}
+async function renderMyRequests(){
+  const c=document.getElementById('myRequests');
+  try{
+    const res=await fetch(SCRIPT_URL+'?type=myRequests&name='+encodeURIComponent(fixName)+'&t='+Date.now());
+    const j=await res.json();
+    const list=(j.requests||[]).slice(0,5);
+    c.innerHTML=list.length?list.map(r=>'<div class="my-req"><span class="req-status req-'+esc(r.Status)+'">'+esc(r.Status)+'</span> '+
+      esc(reqChangeText(r))+(r.Note?'<div style="color:var(--muted);margin-top:2px;">Manager: '+esc(r.Note)+'</div>':'')+'</div>').join('')
+      :'<div style="font-size:12px;color:var(--muted);">No requests yet.</div>';
+  }catch(e){ c.innerHTML='<div style="font-size:12px;color:var(--muted);">Can\'t load requests.</div>'; }
+}
+
+// ── CORRECTION REQUESTS: admin side ──
+let adminRequests=[];
+async function loadRequests(){
+  const j=await adminPost({action_type:'listRequests'});
+  if(j.status!=='ok') throw new Error(j.msg);
+  adminRequests=j.requests||[];
+  const n=adminRequests.filter(r=>r.Status==='PENDING').length;
+  document.getElementById('reqBadge').innerHTML=n?'<span class="tab-badge">'+n+'</span>':'';
+  return adminRequests;
+}
+async function renderRequests(){
+  const pend=document.getElementById('reqPending'), done=document.getElementById('reqDone');
+  pend.innerHTML='<div class="loading-inline"><div class="spinner-sm"></div>Loading…</div>'; done.innerHTML='';
+  try{ await loadRequests(); }
+  catch(e){ pend.innerHTML='<div class="empty-state">Can\'t load requests.</div>'; return; }
+  const card=(r,i)=>{
+    const p=r.Status==='PENDING';
+    return '<div class="req-card'+(p?' pending':'')+'"><div style="display:flex;justify-content:space-between;gap:8px;">'+
+      '<div><strong>'+esc(r.Name)+'</strong> · '+esc(REQ_TYPE[r.Type]||r.Type)+'</div>'+
+      '<span class="req-status req-'+esc(r.Status)+'">'+esc(r.Status)+'</span></div>'+
+      '<div class="req-change">'+esc(reqChangeText(r))+'</div>'+
+      '<div class="req-reason">“'+esc(r.Reason)+'”</div>'+
+      '<div style="font-size:11px;color:var(--muted);">Asked '+esc(tsOrDash(r.Submitted))+(r.Decided?' · decided '+esc(tsOrDash(r.Decided)):'')+(r.Note?' · note: '+esc(r.Note):'')+'</div>'+
+      (p?'<div class="modal-actions" style="margin-top:10px;"><button class="btn-danger" onclick="decideRequest('+i+',\'reject\')">Reject</button>'+
+         '<button class="btn-primary" onclick="decideRequest('+i+',\'approve\')">Approve</button></div>':'')+
+      '</div>';
+  };
+  const pending=[], decided=[];
+  adminRequests.forEach((r,i)=>(r.Status==='PENDING'?pending:decided).push(card(r,i)));
+  pend.innerHTML=pending.join('')||'<div class="empty-state"><div class="empty-icon">✅</div>No requests waiting.</div>';
+  done.innerHTML=decided.join('')||'<div style="font-size:12px;color:var(--muted);">None yet.</div>';
+}
+async function decideRequest(i,decision){
+  const r=adminRequests[i]; if(!r) return;
+  let note='';
+  if(decision==='reject'){
+    const n=prompt('Reject '+r.Name+'\'s request? Optional note for them:','');
+    if(n===null) return;
+    note=n.trim();
+  }else if(!confirm('Approve and apply: '+r.Name+' — '+reqChangeText(r)+'?')) return;
+  const j=await adminWrite({action_type:'decideRequest',id:r.ID,decision,note});
+  if(j&&decision==='approve') sheetCache=null; // the log changed
+  renderRequests();
 }
 
 // ── ADMIN AUTO-LOCK (shared tablet: don't leave admin open) ──
