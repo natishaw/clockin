@@ -291,6 +291,18 @@ tr.long-row td{background:#FFF8EC;}
       </select>
       <button class="btn-primary" onclick="addMissedPunch()">Add</button>
     </div>
+    <p class="section-title">Punches</p>
+    <div class="preset-row">
+      <button class="preset-btn" onclick="setLogPreset('this')">This period</button>
+      <button class="preset-btn" onclick="setLogPreset('last')">Last period</button>
+      <button class="preset-btn" onclick="setLogPreset('all')">All</button>
+    </div>
+    <div class="date-row">
+      <div><label>From</label><input type="date" id="logFrom" onchange="renderLog()"/></div>
+      <div><label>To</label><input type="date" id="logTo" onchange="renderLog()"/></div>
+    </div>
+    <div style="margin-bottom:14px;"><label for="logEmp">Employee</label>
+      <select id="logEmp" onchange="renderLog()"><option value="">Everyone</option></select></div>
     <div id="logTable"></div>
   </div>
 
@@ -359,63 +371,98 @@ tr.long-row td{background:#FFF8EC;}
 
 <script>
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzHP_z39d1HLEv-y0KSwA1Ce8PPx8ptC3a0N7ODMMJ3Ju9lpuWyXOK1gxliFObZQnM6/exec';
-const APP_VERSION = '1.15.0';
+const APP_VERSION = '1.16.0';
 document.getElementById('versionDisplay').textContent = APP_VERSION;
 
-const K_EMPS='ejpm_employees', K_BREAKS='ejpm_breakrules', K_PASS='ejpm_admin_pass';
+const K_EMPS='ejpm_employees', K_BREAKS='ejpm_breakrules', K_TOKEN='ejpm_admin_token';
 const DEFAULT_EMPS=['Pa','Freddy','Rojelio','Walter','Cherry','Aun','Aoy'];
 const DEFAULT_BREAKS={Pa:60};
-const DEFAULT_PASS='2742';
+try{localStorage.removeItem('ejpm_admin_pass');}catch(e){} // passcode is no longer stored on devices
 
 function getEmps(){try{return JSON.parse(localStorage.getItem(K_EMPS))||DEFAULT_EMPS;}catch(e){return DEFAULT_EMPS;}}
 function getBreaks(){try{return JSON.parse(localStorage.getItem(K_BREAKS))||DEFAULT_BREAKS;}catch(e){return DEFAULT_BREAKS;}}
-function getPass(){return localStorage.getItem(K_PASS)||DEFAULT_PASS;}
 function saveEmps(d){localStorage.setItem(K_EMPS,JSON.stringify(d));}
 function saveBreaks(d){localStorage.setItem(K_BREAKS,JSON.stringify(d));}
-function savePass(p){localStorage.setItem(K_PASS,p);}
+function applyConfig(cfg){
+  if(cfg&&Array.isArray(cfg.employees)){saveEmps(cfg.employees);saveBreaks(cfg.breaks||{});return true;}
+  return false;
+}
 
-// Shared config (employee list + break rules) — synced via Google Sheets backend.
-// localStorage acts as an offline cache/fallback.
+// ── BACKEND CALLS ──
+// POST with a JSON reply. Apps Script answers cross-origin, so the app reads the
+// real result (ok / wrong passcode / already clocked in / not found).
+async function apiPost(payload,signal){
+  const res=await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload),signal});
+  if(!res.ok) throw new Error('http_'+res.status);
+  return res.json();
+}
+// Admin-only call: adds the session token; an expired token sends you back to the passcode.
+async function adminPost(payload){
+  const j=await apiPost(Object.assign({},payload,{token:getToken()}));
+  if(j&&j.msg==='unauthorized'){ adminExpired(); throw new Error('unauthorized'); }
+  return j;
+}
+// Admin write with a toast. Returns true if the server confirmed it.
+const ERR_TEXT={not_found:'That punch was not found. Refresh and try again.',bad_row:'Check the name and date/time.',
+  bad_action:'Pick IN or OUT.',busy:'Server busy. Try again.',exists:'That name already exists.',bad_pass:'Must be exactly 4 digits.'};
+async function adminWrite(payload){
+  showToast('Saving…');
+  try{
+    const j=await adminPost(payload);
+    sheetCache=null;
+    if(j.status==='ok'){showToast('Saved ✓',1500);return j;}
+    showToast('Not saved: '+(ERR_TEXT[j.msg]||j.msg),3500);return null;
+  }catch(e){
+    if(e.message!=='unauthorized') showToast('Error — check connection',2500);
+    return null;
+  }
+}
+
+// ── ADMIN SESSION ──
+function getToken(){try{return sessionStorage.getItem(K_TOKEN)||'';}catch(e){return '';}}
+function setToken(t){try{t?sessionStorage.setItem(K_TOKEN,t):sessionStorage.removeItem(K_TOKEN);}catch(e){}}
+function adminExpired(){
+  setToken('');adminUnlocked=false;
+  if(document.getElementById('adminScreen').classList.contains('active')){
+    resetPasscode();showScreen('passcodeScreen');
+    document.getElementById('passcodeError').textContent='Session expired. Enter the passcode again.';
+  }
+}
+
+// Shared staff list (public: the kiosk needs the names). Cached in localStorage for offline.
 async function fetchConfig(){
   try{
     const res=await fetch(SCRIPT_URL+'?type=config&t='+Date.now());
     const cfg=await res.json();
-    if(cfg&&Array.isArray(cfg.employees)){
-      saveEmps(cfg.employees);
-      saveBreaks(cfg.breaks||{});
-    }
-    if(cfg&&typeof cfg.pass==='string'&&/^\d{4}$/.test(cfg.pass)){
-      savePass(cfg.pass);
-    }
+    applyConfig(cfg);
     return cfg;
   }catch(e){return null;}
 }
-async function saveConfig(){
-  await sheetPost({action_type:'saveConfig',config:{employees:getEmps(),breaks:getBreaks(),pass:getPass()}});
+
+// Map raw sheet rows to app records. One bad hand-typed cell is skipped, not fatal.
+function mapRows(raw){
+  if(!Array.isArray(raw)) throw new Error('bad_payload');
+  return raw.filter(r=>r.Timestamp&&r.Name&&r.Action).map(r=>{
+    const d=new Date(r.Timestamp);
+    if(isNaN(d.getTime())) return null;
+    return {
+      name: String(r.Name).trim(),
+      action: String(r.Action).trim().toUpperCase(),
+      timestamp: d.toISOString(),
+      // sent back verbatim so the backend's exact-match on edit/delete still finds the row
+      raw_ts: String(r.Timestamp), raw_name: r.Name, raw_action: r.Action
+    };
+  }).filter(Boolean);
 }
 
-// Sheet cache
+// Full log — admin only. Cached for 60s.
 let sheetCache=null, cacheTime=0;
-// strict=true: throw if the sheet can't be read (callers that must not act on
-// missing data, e.g. the clock-in guard). Otherwise fall back to the last cache.
 async function getSheetRecords(force,strict){
   if(!force&&sheetCache&&(Date.now()-cacheTime<60000)) return sheetCache;
   try{
-    const res=await fetch(SCRIPT_URL+'?t='+Date.now());
-    if(!res.ok) throw new Error('http_'+res.status);
-    const raw=await res.json();
-    if(!Array.isArray(raw)) throw new Error('bad_payload');
-    sheetCache=raw.filter(r=>r.Timestamp&&r.Name&&r.Action).map(r=>{
-      const d=new Date(r.Timestamp);
-      if(isNaN(d.getTime())) return null; // one hand-typed bad cell must not blank the whole app
-      return {
-        name: String(r.Name).trim(),
-        action: String(r.Action).trim().toUpperCase(),
-        timestamp: d.toISOString(),
-        // sent back verbatim so the backend's exact-match on edit/delete still finds the row
-        raw_ts: String(r.Timestamp), raw_name: r.Name, raw_action: r.Action
-      };
-    }).filter(Boolean);
+    const j=await adminPost({action_type:'getLog'});
+    if(j.status!=='ok') throw new Error(j.msg||'error');
+    sheetCache=mapRows(j.rows);
     cacheTime=Date.now();
     return sheetCache;
   }catch(e){
@@ -424,14 +471,12 @@ async function getSheetRecords(force,strict){
   }
 }
 
-// Post to sheet
-async function sheetPost(payload){
-  showToast('Saving…');
-  try{
-    await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload),mode:'no-cors'});
-    sheetCache=null;
-    showToast('Saved ✓',1500);
-  }catch(e){showToast('Error — check connection',2000);}
+// One employee's recent punches — public, used by the kiosk.
+async function fetchMine(name){
+  const res=await fetch(SCRIPT_URL+'?type=mine&name='+encodeURIComponent(name)+'&t='+Date.now());
+  const j=await res.json();
+  if(j.status!=='ok') throw new Error(j.msg||'error');
+  return mapRows(j.rows);
 }
 
 function showToast(msg, duration){
@@ -547,7 +592,13 @@ async function onEmpChange(){
   if(jokeLabel) jokeLabel.textContent=name?('😋 A joke for you, '+name):'😋 Joke of the day';
   if(!name){ statusEl.textContent=''; statusEl.className='clock-status'; if(bi)bi.disabled=false; if(bo)bo.disabled=false; return; }
   statusEl.textContent='Checking…'; statusEl.className='clock-status out';
-  const recs=await getSheetRecords();
+  let recs;
+  try{ recs=await fetchMine(name); }
+  catch(e){
+    if(document.getElementById('empSelect').value!==name) return;
+    statusEl.textContent='Can\'t reach the server — check the Wi-Fi'; statusEl.className='clock-status out';
+    if(bi)bi.disabled=false; if(bo)bo.disabled=false; return;
+  }
   // ignore if the user changed selection while we were fetching
   if(document.getElementById('empSelect').value!==name) return;
   const last=getLastAction(name,recs);
@@ -589,7 +640,7 @@ populateSelect();
 })();
 
 // Screen manager
-let adminUnlocked=false;
+let adminUnlocked=!!getToken(); // token survives a reload in the same tab only
 const ALL=['clockScreen','loadingScreen','successScreen','passcodeScreen','adminScreen'];
 function showScreen(id){ALL.forEach(s=>document.getElementById(s).classList.remove('active'));document.getElementById(id).classList.add('active');}
 
@@ -646,111 +697,94 @@ async function doClockAction(action){
     return; // guard accidental identical re-submit within a few seconds
   }
   clockActionInFlight=true;
-  let failed=false;
   setClockButtonsDisabled(true);
   showScreen('loadingScreen');
   const controller=new AbortController();
-  const timeoutId=setTimeout(()=>controller.abort(),15000);
-  let posted=false; // once the POST is sent, the row may have landed even if we can't confirm it
+  const timeoutId=setTimeout(()=>controller.abort(),20000);
+  const verb='clock '+(action==='IN'?'in':'out');
+  let j=null, reached=false;
   try{
-    // Snapshot how many rows this employee already has (fresh read). Strict: if the
-    // sheet can't be read, don't guess the employee's state from an empty list.
-    const before=await getSheetRecords(true,true);
-    // Guard: block impossible transitions (double clock-in, or clock-out with no open shift).
-    const lastAction=getLastAction(name,before);
-    if(action==='IN'&&lastAction==='IN'){
-      clearTimeout(timeoutId);
-      showScreen('clockScreen');
-      alert(name+' is already clocked in. Tap Clock Out instead.');
-      onEmpChange();
-      return;
-    }
-    if(action==='OUT'&&lastAction!=='IN'){
-      clearTimeout(timeoutId);
-      showScreen('clockScreen');
-      alert(name+' is not currently clocked in. Tap Clock In first.');
-      onEmpChange();
-      return;
-    }
-    const beforeCount=before.filter(r=>r.name===name).length;
-    posted=true;
-    // Send the punch. no-cors guarantees the write isn't blocked by POST CORS;
-    // awaiting it still waits for the server to finish appending the row.
-    await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain'},
-      body:JSON.stringify({name,action,action_type:'clock'}),mode:'no-cors',signal:controller.signal});
-    // Confirm via the GET read path (known to work cross-origin): a new row must
-    // have landed for this employee, and its latest action must match what we sent.
-    sheetCache=null;
-    const after=await getSheetRecords(true,true);
-    clearTimeout(timeoutId);
-    const mine=after.filter(r=>r.name===name)
-      .sort((a,b)=>new Date(a.timestamp)-new Date(b.timestamp));
-    const newest=mine[mine.length-1];
-    if(mine.length<=beforeCount||!newest||newest.action!==action){
-      throw new Error('save_not_confirmed');
-    }
-    lastClockSubmit={name,action,time:Date.now()};
-    const now=new Date();
-    document.getElementById('successIcon').textContent=action==='IN'?'👋':'🚪';
-    document.getElementById('successIcon').className='success-icon '+(action==='IN'?'in':'out');
-    document.getElementById('successTitle').textContent=action==='IN'?'Clocked In!':'Clocked Out!';
-    document.getElementById('successSub').textContent=name;
-    document.getElementById('successTime').textContent=
-      now.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+' · '+
-      now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-    // Hours worked this (bi-weekly) pay period — from completed shifts, net of breaks.
-    try{
-      const pb=payPeriod(now,0);
-      const fromD=new Date(periodISO(pb.start)+'T00:00:00');
-      const toD=new Date(periodISO(pb.end)+'T23:59:59');
-      const totMs=periodSessions(mine,fromD,toD,getBreaks()).reduce((a,s)=>a+s.totalMs,0);
-      const fmtP=d=>(d.getUTCMonth()+1)+'/'+d.getUTCDate();
-      document.getElementById('successHours').innerHTML=
-        '<span class="ph-lbl">Hours this pay period ('+fmtP(pb.start)+'–'+fmtP(pb.end)+')</span>'+
-        '<span class="ph-num">'+fmtDur(totMs)+'</span>'+
-        (action==='IN'?'<span style="font-size:11px;color:var(--muted);font-weight:500;">current shift not counted until you clock out</span>':'');
-    }catch(ePeriod){ document.getElementById('successHours').innerHTML=''; }
-    document.getElementById('empSelect').value='';
-    { const jl=document.getElementById('jokeLabel'); if(jl) jl.textContent='😋 Joke of the day'; }
-    showScreen('successScreen');
-    startAutoReturn();
-  }catch(e){
-    clearTimeout(timeoutId);
+    // The server checks the current state (no double clock-in, no clock-out
+    // without a clock-in) under a lock, saves, and replies with this employee's punches.
+    j=await apiPost({action_type:'clock',name,action},controller.signal);
+    reached=true;
+  }catch(e){ /* network error / timeout: the punch may or may not have landed */ }
+  clearTimeout(timeoutId);
+  clockActionInFlight=false;
+  setClockButtonsDisabled(false);
+
+  if(!j||j.status!=='ok'){
     showScreen('clockScreen');
-    const verb='clock '+(action==='IN'?'in':'out');
-    alert(posted
-      ? 'Could not confirm your '+verb+'. It MAY have saved. Check the status under your name before trying again.'
-      : 'Could not reach the server. Your '+verb+' was NOT recorded. Check the Wi-Fi and try again.');
-    failed=true;
-  }finally{
-    clockActionInFlight=false;
-    setClockButtonsDisabled(false);
+    const msg=j&&j.msg;
+    if(msg==='already_in') alert(name+' is already clocked in. Tap Clock Out instead.');
+    else if(msg==='not_in') alert(name+' is not currently clocked in. Tap Clock In first.');
+    else if(msg==='unknown_employee') alert(name+' is not on the staff list. Ask a manager.');
+    else if(reached) alert('The server could not save your '+verb+' ('+(msg||'error')+'). It was NOT recorded — please try again.');
+    else alert('Could not confirm your '+verb+'. It MAY have saved. Check the status under your name before trying again.');
+    onEmpChange();
+    return;
   }
-  // Re-derive the right button state (and show whether the punch landed) after a failure.
-  if(failed) onEmpChange();
+
+  lastClockSubmit={name,action,time:Date.now()};
+  let mine=[];
+  try{ mine=mapRows(j.rows); }catch(e){}
+  const now=new Date();
+  document.getElementById('successIcon').textContent=action==='IN'?'👋':'🚪';
+  document.getElementById('successIcon').className='success-icon '+(action==='IN'?'in':'out');
+  document.getElementById('successTitle').textContent=action==='IN'?'Clocked In!':'Clocked Out!';
+  document.getElementById('successSub').textContent=name;
+  document.getElementById('successTime').textContent=
+    now.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+' · '+
+    now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  // Hours worked this (bi-weekly) pay period — from completed shifts, net of breaks.
+  try{
+    const pb=payPeriod(now,0);
+    const fromD=new Date(periodISO(pb.start)+'T00:00:00');
+    const toD=new Date(periodISO(pb.end)+'T23:59:59');
+    const totMs=periodSessions(mine,fromD,toD,getBreaks()).reduce((a,s)=>a+s.totalMs,0);
+    const fmtP=d=>(d.getUTCMonth()+1)+'/'+d.getUTCDate();
+    document.getElementById('successHours').innerHTML=
+      '<span class="ph-lbl">Hours this pay period ('+fmtP(pb.start)+'–'+fmtP(pb.end)+')</span>'+
+      '<span class="ph-num">'+fmtDur(totMs)+'</span>'+
+      (action==='IN'?'<span style="font-size:11px;color:var(--muted);font-weight:500;">current shift not counted until you clock out</span>':'');
+  }catch(ePeriod){ document.getElementById('successHours').innerHTML=''; }
+  sheetCache=null;
+  document.getElementById('empSelect').value='';
+  { const jl=document.getElementById('jokeLabel'); if(jl) jl.textContent='😋 Joke of the day'; }
+  { const st=document.getElementById('clockStatus'); st.textContent=''; st.className='clock-status'; }
+  showScreen('successScreen');
+  startAutoReturn();
 }
 
 // Passcode
 let pcInput='';
 function resetPasscode(){pcInput='';document.getElementById('passcodeError').textContent='';updateDots();}
 function updateDots(){for(let i=0;i<4;i++)document.getElementById('d'+i).classList.toggle('filled',i<pcInput.length);}
+let loginInFlight=false;
 function numPress(d){
-  if(pcInput.length>=4)return;
+  if(pcInput.length>=4||loginInFlight)return;
   pcInput+=d; updateDots();
-  if(pcInput.length===4){
-    setTimeout(()=>{
-      if(pcInput===getPass()){
-        adminUnlocked=true;pcInput='';updateDots();
-        enterAdmin();
-      }else{
-        document.getElementById('passcodeError').textContent='Incorrect passcode. Try again.';
-        pcInput='';setTimeout(updateDots,150);
-      }
-    },200);
+  if(pcInput.length===4) tryLogin(pcInput);
+}
+async function tryLogin(pass){
+  loginInFlight=true;
+  const err=document.getElementById('passcodeError');
+  err.textContent='Checking…';
+  let j=null;
+  try{ j=await apiPost({action_type:'login',pass}); }catch(e){}
+  loginInFlight=false;
+  pcInput='';
+  if(j&&j.status==='ok'&&j.token){
+    setToken(j.token); adminUnlocked=true; updateDots(); err.textContent='';
+    enterAdmin(); return;
   }
+  setTimeout(updateDots,150);
+  if(!j) err.textContent='Can\'t reach the server. Check the Wi-Fi.';
+  else if(j.msg==='locked') err.textContent='Too many wrong tries. Admin is locked for 15 minutes.';
+  else err.textContent='Incorrect passcode. Try again.'+(typeof j.left==='number'&&j.left<=3?' ('+j.left+' tries left)':'');
 }
 function numDel(){if(pcInput.length>0){pcInput=pcInput.slice(0,-1);updateDots();}}
-function lockAdmin(){adminUnlocked=false;navTo('clock');}
+function lockAdmin(){const t=getToken();if(t)apiPost({action_type:'logout',token:t}).catch(()=>{});setToken('');adminUnlocked=false;sheetCache=null;navTo('clock');}
 
 // Tabs
 let activeTab='onshift';
@@ -968,21 +1002,41 @@ async function renderPayroll(){
 // ── LOG TAB ──
 let logRecords = []; // module-level store — no data in onclick strings
 
+function setLogPreset(which){
+  const f=document.getElementById('logFrom'), t=document.getElementById('logTo');
+  if(which==='all'){f.value='';t.value='';}
+  else{const b=payPeriod(new Date(),which==='last'?-1:0);f.value=periodISO(b.start);t.value=periodISO(b.end);}
+  renderLog();
+}
+let logInitialized=false;
 async function renderLog(){
-  document.getElementById('logTable').innerHTML='<div class="loading-inline"><div class="spinner-sm"></div>Loading\u2026</div>';
+  // Default view: this pay period (the full history keeps growing).
+  if(!logInitialized){logInitialized=true;const b=payPeriod(new Date(),0);
+    document.getElementById('logFrom').value=periodISO(b.start);document.getElementById('logTo').value=periodISO(b.end);}
+  document.getElementById('logTable').innerHTML='<div class="loading-inline"><div class="spinner-sm"></div>Loading…</div>';
   const raw = await getSheetRecords();
-  logRecords = raw.slice().reverse(); // newest first
   populateSelect();
+  // Employee filter: staff list plus anyone who appears in the log (e.g. removed staff).
+  const le=document.getElementById('logEmp'), prev=le.value;
+  const names=[...new Set(getEmps().concat(raw.map(r=>r.name)))].sort((a,b)=>a.localeCompare(b));
+  le.innerHTML='<option value="">Everyone</option>'+names.map(n=>'<option value="'+esc(n)+'">'+esc(n)+'</option>').join('');
+  le.value=names.includes(prev)?prev:'';
+  const fv=document.getElementById('logFrom').value, tv=document.getElementById('logTo').value;
+  const fromD=fv?new Date(fv+'T00:00:00'):null, toD=tv?new Date(tv+'T23:59:59'):null;
+  logRecords = raw.filter(r=>{
+    const d=new Date(r.timestamp);
+    return (!le.value||r.name===le.value)&&(!fromD||d>=fromD)&&(!toD||d<=toD);
+  }).sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp)); // newest first
   if(logRecords.length===0){
-    document.getElementById('logTable').innerHTML='<div class="empty-state"><div class="empty-icon">📭</div>No records yet.</div>';
+    document.getElementById('logTable').innerHTML='<div class="empty-state"><div class="empty-icon">📭</div>No punches match this filter.</div>';
     return;
   }
-  let html='<div class="tbl-wrap"><table><thead><tr><th>#</th><th>Name</th><th>Action</th><th>Date &amp; Time</th><th>Actions</th></tr></thead><tbody>';
+  let html='<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">'+logRecords.length+' of '+raw.length+' punches</div>';
+  html+='<div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Action</th><th>Date &amp; Time</th><th>Actions</th></tr></thead><tbody>';
   logRecords.forEach((e,i)=>{
     const d=new Date(e.timestamp);
     const dt=d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'})+' '+fmtTime(d);
     html+=`<tr>
-      <td style="color:var(--muted);font-size:12px;">${logRecords.length-i}</td>
       <td><strong>${esc(e.name)}</strong></td>
       <td><span class="badge badge-${e.action==='IN'?'in':'out'}">${esc(e.action)}</span></td>
       <td style="font-family:'DM Mono',monospace;font-size:11px;">${dt}</td>
@@ -1002,9 +1056,8 @@ async function addMissedPunch(){
   const dtVal=document.getElementById('addDatetime').value;
   const action=document.getElementById('addAction').value;
   if(!name||!dtVal){alert('Select a name and date/time.');return;}
-  await sheetPost({action_type:'addRow', timestamp:fromDatetimeLocal(dtVal), name, action});
-  document.getElementById('addDatetime').value='';
-  sheetCache=null;
+  const ok=await adminWrite({action_type:'addRow', timestamp:fromDatetimeLocal(dtVal), name, action});
+  if(ok) document.getElementById('addDatetime').value='';
   renderLog();
 }
 
@@ -1040,16 +1093,14 @@ async function saveEditRecord(){
     new_timestamp:fromDatetimeLocal(dtVal), new_name:name, new_action:action
   };
   closeEditModal();
-  await sheetPost(payload);
-  sheetCache=null;
+  await adminWrite(payload);
   renderLog();
 }
 async function deleteLogRecord(i){
   const r=logRecords[i];
   if(!r) return;
   if(!confirm('Delete this '+r.action+' punch for '+r.name+'?')) return;
-  await sheetPost({action_type:'deleteRow', timestamp:r.raw_ts, name:r.raw_name, action:r.raw_action});
-  sheetCache=null;
+  await adminWrite({action_type:'deleteRow', timestamp:r.raw_ts, name:r.raw_name, action:r.raw_action});
   renderLog();
 }
 
@@ -1067,25 +1118,31 @@ function renderEmployees(){
       '<button onclick="removeEmployee(getEmps()['+i+'])" class="btn-danger" style="padding:6px 10px;font-size:12px;">✕</button></div></div>';
   }).join('');
 }
-function toggleBreak(emp){if(!emp)return;const b=getBreaks();if(b[emp])delete b[emp];else b[emp]=60;saveBreaks(b);renderEmployees();saveConfig();}
-function addEmployee(){
+// Each change is applied on the server (under a lock) and the server sends back the
+// whole list, so two devices editing at once can't wipe each other's changes.
+async function employeeOp(payload){
+  const j=await adminWrite(Object.assign({action_type:'employee'},payload));
+  if(j&&applyConfig(j.config)){renderEmployees();populateSelect();}
+  return !!j;
+}
+function toggleBreak(emp){
+  if(!emp)return;
+  employeeOp({op:'setBreak',name:emp,break_min:getBreaks()[emp]?0:60});
+}
+async function addEmployee(){
   const name=document.getElementById('newEmpName').value.trim();
   const bMin=parseInt(document.getElementById('newEmpBreak').value)||0;
   if(!name){alert('Enter a name.');return;}
-  const emps=getEmps();
-  if(emps.some(e=>e.toLowerCase()===name.toLowerCase())){alert('Already exists.');return;}
-  emps.push(name);saveEmps(emps);
-  if(bMin>0){const b=getBreaks();b[name]=bMin;saveBreaks(b);}
-  document.getElementById('newEmpName').value='';
-  document.getElementById('newEmpBreak').value='';
-  renderEmployees();populateSelect();saveConfig();
+  if(getEmps().some(e=>e.toLowerCase()===name.toLowerCase())){alert('Already exists.');return;}
+  if(await employeeOp({op:'add',name,break_min:bMin})){
+    document.getElementById('newEmpName').value='';
+    document.getElementById('newEmpBreak').value='';
+  }
 }
 function removeEmployee(emp){
   if(!emp)return;
   if(!confirm('Remove '+emp+'?'))return;
-  saveEmps(getEmps().filter(e=>e!==emp));
-  const b=getBreaks();if(b[emp]){delete b[emp];saveBreaks(b);}
-  renderEmployees();populateSelect();saveConfig();
+  employeeOp({op:'remove',name:emp});
 }
 
 // ── EXPORT ──
@@ -1114,16 +1171,36 @@ function dlCSV(csv,name){
 }
 
 // ── SETTINGS ──
-function changePass(){
+async function changePass(){
+  const msg=document.getElementById('passMsg');
   const p=document.getElementById('newPass').value.trim();
-  if(!/^\d{4}$/.test(p)){document.getElementById('passMsg').style.color='var(--danger)';document.getElementById('passMsg').textContent='Must be exactly 4 digits.';return;}
-  savePass(p);
+  if(!/^\d{4}$/.test(p)){msg.style.color='var(--danger)';msg.textContent='Must be exactly 4 digits.';return;}
+  const ok=await adminWrite({action_type:'changePass',new_pass:p});
+  if(!ok) return;
   document.getElementById('newPass').value='';
-  document.getElementById('passMsg').style.color='var(--in-color)';
-  document.getElementById('passMsg').textContent='✓ Passcode updated!';
-  setTimeout(()=>document.getElementById('passMsg').textContent='',2500);
-  saveConfig();
+  msg.style.color='var(--in-color)';
+  msg.textContent='✓ Passcode updated on all devices';
+  setTimeout(()=>msg.textContent='',2500);
 }
+
+// ── ADMIN AUTO-LOCK (shared tablet: don't leave admin open) ──
+let lastAdminActivity=Date.now();
+['pointerdown','keydown'].forEach(ev=>document.addEventListener(ev,()=>{lastAdminActivity=Date.now();},true));
+setInterval(()=>{
+  if(adminUnlocked&&Date.now()-lastAdminActivity>10*60000) lockAdmin();
+},30000);
+
+// ── AUTO-UPDATE (kiosk tablets stay open for days) ──
+// Every 30 min, while idle on the clock screen, reload if a newer version is live.
+setInterval(async()=>{
+  try{
+    const onClock=document.getElementById('clockScreen').classList.contains('active');
+    if(!onClock||document.getElementById('empSelect').value) return;
+    const txt=await (await fetch(location.pathname+'?v='+Date.now(),{cache:'no-store'})).text();
+    const m=txt.match(/APP_VERSION\s*=\s*'([^']+)'/);
+    if(m&&m[1]!==APP_VERSION) location.reload();
+  }catch(e){}
+},30*60000);
 </script>
 </body>
 </html>
