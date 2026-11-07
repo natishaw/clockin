@@ -388,7 +388,7 @@ tr.long-row td{background:#FFF8EC;}
 <div class="modal-overlay" id="fixModalOverlay">
   <div class="modal-card">
     <h3>Request a fix · <span id="fixWho"></span></h3>
-    <p style="font-size:12px;color:var(--muted);margin:-8px 0 14px;">Your manager approves every change. Nothing changes until then.</p>
+    <p style="font-size:12px;color:var(--muted);margin:-8px 0 14px;">The admin approves every change. Nothing changes until then.</p>
     <label for="fixType">What's wrong?</label>
     <select id="fixType" onchange="onFixTypeChange()">
       <option value="edit">A punch has the wrong time</option>
@@ -776,7 +776,7 @@ async function doClockAction(action){
     const msg=j&&j.msg;
     if(msg==='already_in') alert(name+' is already clocked in. Tap Clock Out instead.');
     else if(msg==='not_in') alert(name+' is not currently clocked in. Tap Clock In first.');
-    else if(msg==='unknown_employee') alert(name+' is not on the staff list. Ask a manager.');
+    else if(msg==='unknown_employee') alert(name+' is not on the staff list. Ask the admin.');
     else if(reached) alert('The server could not save your '+verb+' ('+(msg||'error')+'). It was NOT recorded — please try again.');
     else alert('Could not confirm your '+verb+'. It MAY have saved. Check the status under your name before trying again.');
     onEmpChange();
@@ -1247,8 +1247,8 @@ async function changePass(){
 // ── CORRECTION REQUESTS: kiosk side ──
 const FIX_ERR={unknown_employee:'Your name is not on the staff list.',no_reason:'Please add a reason.',
   punch_not_found:'That punch changed. Close and try again.',bad_time:'Pick the correct date and time.',
-  future_time:'That time is in the future.',too_old:'That is too long ago. Ask your manager.',
-  too_many_pending:'You already have 5 requests waiting. Ask your manager.',bad_action:'Pick Clock In or Clock Out.',busy:'Server busy. Try again.'};
+  future_time:'That time is in the future.',too_old:'That is too long ago. Ask the admin.',
+  too_many_pending:'You already have 5 requests waiting. Ask the admin.',bad_action:'Pick Clock In or Clock Out.',busy:'Server busy. Try again.'};
 const REQ_TYPE={edit:'Change time',add:'Add missed punch',delete:'Remove punch'};
 let fixName='', fixPunches=[], fixCloseTimer=null;
 function fmtShort(d){return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+' '+d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});}
@@ -1317,7 +1317,7 @@ async function submitFix(){
   let j=null; try{ j=await apiPost(payload); }catch(e){}
   btn.disabled=false;
   if(j&&j.status==='ok'){
-    msg.style.color='var(--in-color)'; msg.textContent='✓ Sent. Your manager will review it.';
+    msg.style.color='var(--in-color)'; msg.textContent='✓ Sent. The admin will review it.';
     document.getElementById('fixReason').value='';
     renderMyRequests();
   }else{
@@ -1338,7 +1338,7 @@ async function renderMyRequests(){
     const j=await res.json();
     const list=(j.requests||[]).slice(0,5);
     c.innerHTML=list.length?list.map(r=>'<div class="my-req"><span class="req-status req-'+esc(r.Status)+'">'+esc(r.Status)+'</span> '+
-      esc(reqChangeText(r))+(r.Note?'<div style="color:var(--muted);margin-top:2px;">Manager: '+esc(r.Note)+'</div>':'')+'</div>').join('')
+      esc(reqChangeText(r))+(r.Note?'<div style="color:var(--muted);margin-top:2px;">Admin: '+esc(r.Note)+'</div>':'')+'</div>').join('')
       :'<div style="font-size:12px;color:var(--muted);">No requests yet.</div>';
   }catch(e){ c.innerHTML='<div style="font-size:12px;color:var(--muted);">Can\'t load requests.</div>'; }
 }
